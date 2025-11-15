@@ -41,7 +41,10 @@ bool fullscreenEvent;
 bool enableCursor = true;
 bool enableGrid = true;
 bool enableSkybox = false;
+bool enablePixelate = true;
 bool gridMode = false;
+int pixelFbResolution = 320;
+int lastPixelFbResolution = 320;
 
 float fpsCounter = 0;
 float fpsCount = 0;
@@ -127,6 +130,14 @@ int main()
     Shader shader = *resources.GetShader("base");
     Shader skyboxShader = *resources.GetShader("skybox_shader");
     Shader gridShader = *resources.GetShader("infinite_grid");
+    Shader fbPixelShader = *resources.GetShader("fb_pixel");
+
+    Framebuffer pixelFrameBuffer(fbPixelShader, window.GetWidth(), window.GetHeight());
+    pixelFrameBuffer.SetMaxResolution(WIDTH, pixelFbResolution);
+    pixelFrameBuffer.SetRenderFilter(GL_NEAREST);
+    pixelFrameBuffer.CreateFramebuffer(window.GetWidth(), window.GetHeight());
+
+    window.AddFramebuffer(&pixelFrameBuffer);
 
     Camera camera({2.0f, 2.0f, 2.0f}, {0.0f, 1.0f, 0.0f});
     camera.SetInput(Input::Keyboard::GetInstance(), Input::Mouse::GetInstance());
@@ -177,17 +188,32 @@ int main()
             fpsCount = 0;
         }
 
-        glBindFramebuffer(GL_FRAMEBUFFER, 0);
-        glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-        glEnable(GL_DEPTH_TEST);
+        if (enablePixelate)
+        {
+            if (pixelFbResolution != lastPixelFbResolution)
+            {
+                pixelFrameBuffer.DestroyFramebuffer();
+                pixelFrameBuffer.SetMaxResolution(WIDTH, pixelFbResolution);
+                pixelFrameBuffer.CreateFramebuffer(window.GetWidth(), window.GetHeight());
+                lastPixelFbResolution = pixelFbResolution;
+            }
+
+            pixelFrameBuffer.BeginRender();
+        }
+        else
+        {
+            glBindFramebuffer(GL_FRAMEBUFFER, 0);
+            glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+            glEnable(GL_DEPTH_TEST);
+        }
 
         window.StartGui();
 
         camera.Move(deltaTime);
 
         view = camera.GetLookAt();
-        projection = glm::perspective(glm::radians(45.0f), window.GetAspect(), 0.1f, 100.0f);
+        projection = glm::perspective(glm::radians(45.0f), pixelFrameBuffer.GetAspect(), 0.1f, 100.0f);
 
         skybox
             .BeginRender(skyboxShader)
@@ -216,6 +242,13 @@ int main()
 
         glDisable(GL_BLEND);
 
+        if (enablePixelate)
+        {
+            window.EnableWindowViewport();
+            Framebuffer::EnableMainFramebuffer();
+            pixelFrameBuffer.RenderQuad();
+        }
+
         keyboard.HandleKeyLoop();
 
         // region gui
@@ -236,6 +269,10 @@ int main()
         ImGui::Checkbox("Enable Grid", &enableGrid);
         ImGui::Checkbox("Enable skybox", &enableSkybox);
 
+        ImGui::SeparatorText("Pixelate effect settings");
+        ImGui::Checkbox("Enable pixelate", &enablePixelate);
+        ImGui::SliderInt("Resolution (width)", &pixelFbResolution, 120, 2048);
+
         ImGui::SeparatorText("Shader reload");
 
         if (ImGui::Button("Reload base shader"))
@@ -244,6 +281,7 @@ int main()
             std::cout << "Shader reloaded";
         }
 
+        ImGui::SeparatorText("Other settings");
         if (ImGui::Checkbox("Set grid mode", &gridMode))
             std::cout << std::format("Grid mode: {}\n", gridMode ? "enabled" : "disabled");
 
