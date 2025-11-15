@@ -29,6 +29,8 @@
 #include "StorageBufferDynamicArray.h"
 #include "Window.h"
 #include "imgui.h"
+#include <AL/al.h>
+#include <AL/alut.h>
 
 #include <iostream>
 
@@ -79,6 +81,9 @@ Uniforms uniforms{};
 Primitives::Plane plane;
 Primitives::Cube cube;
 
+ECS::Registry registry;
+ECS::SystemManager systemManager;
+
 void ConfigureKeys(Window &window)
 {
     keyboard
@@ -108,18 +113,17 @@ void ConfigureKeys(Window &window)
                      });
 }
 
-int main()
+int main(int argc, char** argv)
 {
-    Window window(1280, 720, "OpenGL Playground");
+    Window window(1280, 720, "Proyecto Final CGA");
+
+    alutInit(&argc, argv);
 
     if (!window.Init())
     {
         std::cerr << "Cannot initialize window.\n";
         return 1;
     }
-
-    ECS::Registry registry;
-    ECS::SystemManager systemManager;
 
     registry.RegisterComponent<ECS::Components::Transform>();
     registry.RegisterComponent<ECS::Components::MeshRenderer>();
@@ -238,6 +242,8 @@ int main()
             glEnable(GL_DEPTH_TEST);
         }
 
+        glPolygonMode(GL_FRONT_AND_BACK, gridMode ? GL_LINE : GL_FILL);
+
         window.StartGui();
 
         camera.Move(deltaTime);
@@ -343,6 +349,8 @@ int main()
         window.EndGui();
         window.EndRenderPass();
     }
+
+    alutExit();
 
     return 0;
 }
