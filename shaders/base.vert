@@ -28,13 +28,17 @@ void main() {
 
     mat4 boneTransform = mat4(1.0f);
     mat4 totalBoneTransform = mat4(0.0f);
-    for (int i = 0; i < MAX_BONE_INFLUENCE; i++)
+    if (numBones > 0)
     {
-        if (boneIds[i] == -1) continue;
-        if (weights[i] == 0.0f) continue;
-        totalBoneTransform += bones[boneIds[i]] * weights[i];
+
+        for (int i = 0; i < MAX_BONE_INFLUENCE; i++)
+        {
+            if (boneIds[i] == -1) continue;
+            if (weights[i] == 0.0f) continue;
+            totalBoneTransform += bones[boneIds[i]] * weights[i];
+        }
+        boneTransform = totalBoneTransform;
     }
-    boneTransform = totalBoneTransform;
 
     Normal = mat3(transpose(inverse(model * boneTransform))) * normal;
 

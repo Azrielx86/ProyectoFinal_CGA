@@ -34,8 +34,17 @@
 
 #define RGBCOLOR(r, g, b) glm::vec3(r / 255.0f, g / 255.0f, b / 255.0f)
 
+struct SingleKeyPress
+{
+    bool clicked = true;
+    bool event = true;
+};
+
+SingleKeyPress debugMode;
+
 float deltaTime, lastTime;
 float red = 0.0f;
+bool showDebugGui = true;
 bool enableCursorEvent = true;
 bool fullscreenEvent;
 bool enableCursor = true;
@@ -49,6 +58,10 @@ int lastPixelFbResolution = 320;
 float fpsCounter = 0;
 float fpsCount = 0;
 float fps = 0;
+
+// region Models Section
+Model oxxoStore("./assets/models/OxxoStore/OxxoStore.obj");
+// endregion Models Section
 
 Input::Keyboard &keyboard = *Input::Keyboard::GetInstance();
 Input::Mouse &mouse = *Input::Mouse::GetInstance();
@@ -86,6 +99,12 @@ void ConfigureKeys(Window &window)
                          if (fullscreenEvent) return;
                          fullscreenEvent = true;
                          window.ToggleFullscreen();
+                     })
+        .AddCallback(GLFW_KEY_F3, []() -> void
+                     {
+                         if (debugMode.event) return;
+                         debugMode.event = true;
+                         showDebugGui = !showDebugGui;
                      });
 }
 
@@ -114,6 +133,8 @@ int main()
 
     resources.ScanResources();
     Resources::ResourceManager::InitDefaultResources();
+
+    oxxoStore.Load();
 
     // clang-format off
 	Skybox skybox({
@@ -154,7 +175,7 @@ int main()
     StorageBufferDynamicArray<Lights::PointLight> pointLights(3);
     pointLights.Add({.position = {2.0f, 2.0f, 2.0f, 0.0f},
                      .ambient = {0.1f, 0.1f, 0.1f, 0.0f},
-                     .diffuse = {1.0f, 0.0f, 0.0f, 0.0f},
+                     .diffuse = {0.9f, 0.7f, 0.7f, 0.0f},
                      .specular = {1.0f, 1.0f, 1.0f, 0.0f},
                      .constant = 1.0f,
                      .linear = 0.09f,
@@ -166,9 +187,18 @@ int main()
     plane.Init();
     cube.Init();
 
+    // region Entities
+    ECS::Entity oxxoStoreEntity = registry.CreateEntity();
+    registry.AddComponent(oxxoStoreEntity, ECS::Components::Transform{
+                                               .translation = {0.0f, 0.0f, 0.0f},
+                                               .scale = {0.1f, 0.1f, 0.1f}});
+    registry.AddComponent(oxxoStoreEntity, ECS::Components::MeshRenderer{
+                                               .model = &oxxoStore,
+                                               .shader = &shader});
+    // endregion Entities
+
     glm::mat4 view;
     glm::mat4 projection;
-    glm::mat4 model;
 
     while (!window.ShouldClose())
     {
@@ -215,18 +245,24 @@ int main()
         view = camera.GetLookAt();
         projection = glm::perspective(glm::radians(45.0f), pixelFrameBuffer.GetAspect(), 0.1f, 100.0f);
 
-        skybox
-            .BeginRender(skyboxShader)
-            .SetProjection(projection)
-            .SetView(view)
-            .Render();
+        if (enableSkybox)
+        {
+            skybox
+                .BeginRender(skyboxShader)
+                .SetProjection(projection)
+                .SetView(view)
+                .Render();
+        }
 
         shader.Use();
         uniforms.model = shader.GetUniformLocation("model");
 
+        shader.Set("pointLightsSize", static_cast<int>(pointLights.Size()));
         shader.Set<4, 4>("view", view);
         shader.Set<4, 4>("projection", projection);
         shader.Set<3>("ambientLightColor", glm::vec3{1.0f, 1.0f, 1.0f});
+
+        systemManager.UpdateAll(registry, deltaTime);
 
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -252,51 +288,56 @@ int main()
         keyboard.HandleKeyLoop();
 
         // region gui
-        ImGui::Begin("Camera info");
-        auto camPos = camera.GetPosition();
-        auto camDir = camera.GetDirection();
-        ImGui::Text("Position: x=%f y=%f z=%f", static_cast<double>(camPos.x), static_cast<double>(camPos.y),
-                    static_cast<double>(camPos.z));
-        ImGui::Text("Direction: x=%f y=%f z=%f", static_cast<double>(camDir.x), static_cast<double>(camDir.y),
-                    static_cast<double>(camDir.z));
-        ImGui::Text("Yaw = %f | Pitch = %f", static_cast<double>(camera.GetYaw()),
-                    static_cast<double>(camera.GetPitch()));
-        ImGui::End();
-
-        ImGui::Begin("Engine Info and Settings");
-        ImGui::Text("Delta time = %f", static_cast<double>(deltaTime));
-        ImGui::Text("FPS = %f", static_cast<double>(fps));
-        ImGui::Checkbox("Enable Grid", &enableGrid);
-        ImGui::Checkbox("Enable skybox", &enableSkybox);
-
-        ImGui::SeparatorText("Pixelate effect settings");
-        ImGui::Checkbox("Enable pixelate", &enablePixelate);
-        ImGui::SliderInt("Resolution (width)", &pixelFbResolution, 120, 2048);
-
-        ImGui::SeparatorText("Shader reload");
-
-        if (ImGui::Button("Reload base shader"))
+        if (showDebugGui)
         {
-            shader.ReloadShader();
-            std::cout << "Shader reloaded";
+
+            ImGui::Begin("Camera info");
+            auto camPos = camera.GetPosition();
+            auto camDir = camera.GetDirection();
+            ImGui::Text("Position: x=%f y=%f z=%f", static_cast<double>(camPos.x), static_cast<double>(camPos.y),
+                        static_cast<double>(camPos.z));
+            ImGui::Text("Direction: x=%f y=%f z=%f", static_cast<double>(camDir.x), static_cast<double>(camDir.y),
+                        static_cast<double>(camDir.z));
+            ImGui::Text("Yaw = %f | Pitch = %f", static_cast<double>(camera.GetYaw()),
+                        static_cast<double>(camera.GetPitch()));
+            ImGui::End();
+
+            ImGui::Begin("Engine Info and Settings");
+            ImGui::Text("Delta time = %f", static_cast<double>(deltaTime));
+            ImGui::Text("FPS = %f", static_cast<double>(fps));
+            ImGui::Checkbox("Enable Grid", &enableGrid);
+            ImGui::Checkbox("Enable skybox", &enableSkybox);
+
+            ImGui::SeparatorText("Pixelate effect settings");
+            ImGui::Checkbox("Enable pixelate", &enablePixelate);
+            ImGui::SliderInt("Resolution (width)", &pixelFbResolution, 64, 2048);
+
+            ImGui::SeparatorText("Shader reload");
+
+            if (ImGui::Button("Reload base shader"))
+            {
+                shader.ReloadShader();
+                std::cout << "Shader reloaded";
+            }
+
+            ImGui::SeparatorText("Other settings");
+            if (ImGui::Checkbox("Set grid mode", &gridMode))
+                std::cout << std::format("Grid mode: {}\n", gridMode ? "enabled" : "disabled");
+
+            if (ImGui::DragFloat("Camera move speed", &cameraMoveSpeed))
+                camera.SetMoveSpeed(cameraMoveSpeed);
+
+            if (ImGui::DragFloat("Camera turn speed", &cameraTurnSpeed))
+                camera.SetTurnSpeed(cameraTurnSpeed);
+
+            ImGui::End();
         }
-
-        ImGui::SeparatorText("Other settings");
-        if (ImGui::Checkbox("Set grid mode", &gridMode))
-            std::cout << std::format("Grid mode: {}\n", gridMode ? "enabled" : "disabled");
-
-        if (ImGui::DragFloat("Camera move speed", &cameraMoveSpeed))
-            camera.SetMoveSpeed(cameraMoveSpeed);
-
-        if (ImGui::DragFloat("Camera turn speed", &cameraTurnSpeed))
-            camera.SetTurnSpeed(cameraTurnSpeed);
-
-        ImGui::End();
         // endregion
 
         // region Special keys handle
         if (!keyboard.GetKeyPress(GLFW_KEY_T)) enableCursorEvent = false;
         if (!keyboard.GetKeyPress(GLFW_KEY_F11)) fullscreenEvent = false;
+        if (!keyboard.GetKeyPress(GLFW_KEY_F3)) debugMode.event = false;
         // endregion
 
         window.EndGui();
