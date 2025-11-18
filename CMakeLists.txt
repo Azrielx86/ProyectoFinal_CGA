@@ -14,6 +14,12 @@ if (NOT UNIX)
     add_compile_definitions(-DWIN32)
 endif ()
 
+if (VCPKG_TOOLCHAIN)
+    find_package(nlohmann_json CONFIG REQUIRED)
+else ()
+    find_package(nlohmann_json REQUIRED)
+endif ()
+
 add_subdirectory(AzxEngineGL)
 
 add_compile_options(-Wall -Wextra -Wconversion -Wdouble-promotion -Wno-sign-conversion -Wno-unknown-pragmas -Wuninitialized)
@@ -27,7 +33,9 @@ else ()
     add_compile_options(-O3)
 endif ()
 
-add_executable(ProyectoFinal_CGA main.cpp)
+add_executable(ProyectoFinal_CGA src/main.cpp
+        src/GameSettings.h
+        src/DebugSettings.h)
 
 if (NOT USE_DEBUG_ASSETS)
     message(STATUS "Copying shader files.")
@@ -38,4 +46,5 @@ else ()
     message(STATUS "Using debug assets.")
 endif ()
 
-target_link_libraries(ProyectoFinal_CGA PRIVATE AzxEngineGL)
+target_link_libraries(ProyectoFinal_CGA PUBLIC AzxEngineGL)
+target_link_libraries(ProyectoFinal_CGA PUBLIC nlohmann_json::nlohmann_json)

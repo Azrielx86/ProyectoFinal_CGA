@@ -7,6 +7,7 @@
 // endregion Global Include
 
 #include "Camera.h"
+#include "DebugSettings.h"
 #include "ECS/Components/Collider.h"
 #include "ECS/Components/MeshRenderer.h"
 #include "ECS/Components/PlayerController.h"
@@ -29,10 +30,11 @@
 #include "StorageBufferDynamicArray.h"
 #include "Window.h"
 #include "imgui.h"
-#include <AL/al.h>
 #include <AL/alut.h>
+#include <nlohmann/json.hpp>
 
 #include <deque>
+#include <fstream>
 #include <iostream>
 
 #define RGBCOLOR(r, g, b) glm::vec3(r / 255.0f, g / 255.0f, b / 255.0f)
@@ -44,6 +46,8 @@ struct SingleKeyPress
 };
 
 SingleKeyPress debugMode;
+
+const std::string debugSettingsPath = "./debug_settings.json";
 
 float deltaTime, lastTime;
 float red = 0.0f;
@@ -86,6 +90,8 @@ Primitives::Cube cube;
 ECS::Registry registry;
 ECS::SystemManager systemManager;
 
+DebugSettings debugSettings;
+
 // region Game Variables
 std::deque<ECS::Entity> pathEntities;
 float pathVelocity = 0.01f;
@@ -121,6 +127,21 @@ void ConfigureKeys(Window &window)
                      });
 }
 
+void LoadSettings()
+{
+    if (std::ifstream debugSettingsStream(debugSettingsPath); debugSettingsStream.is_open())
+        debugSettings = nlohmann::json::parse(debugSettingsStream);
+}
+
+void SaveSettings()
+{
+    if (std::ofstream debugSettingsStream(debugSettingsPath); debugSettingsStream.is_open())
+    {
+        const nlohmann::json data = debugSettings;
+        debugSettingsStream << data.dump();
+    }
+}
+
 int main(int argc, char **argv)
 {
     Window window(1280, 720, "Proyecto Final CGA");
@@ -132,6 +153,8 @@ int main(int argc, char **argv)
         std::cerr << "Cannot initialize window.\n";
         return 1;
     }
+
+    LoadSettings();
 
     registry.RegisterComponent<ECS::Components::Transform>();
     registry.RegisterComponent<ECS::Components::MeshRenderer>();
@@ -177,11 +200,8 @@ int main(int argc, char **argv)
     Camera camera({2.0f, 2.0f, 2.0f}, {0.0f, 1.0f, 0.0f});
     camera.SetInput(Input::Keyboard::GetInstance(), Input::Mouse::GetInstance());
 
-    float cameraMoveSpeed = 150.0f;
-    float cameraTurnSpeed = 75.0f;
-
-    camera.SetMoveSpeed(cameraMoveSpeed);
-    camera.SetTurnSpeed(cameraTurnSpeed);
+    camera.SetMoveSpeed(debugSettings.cameraMoveSpeed);
+    camera.SetTurnSpeed(debugSettings.cameraTurnSpeed);
 
     mouse.ToggleMouse(enableCursor);
     window.SetMouseStatus(enableCursor);
@@ -297,7 +317,7 @@ int main(int argc, char **argv)
         for (ECS::Entity pathEntity : pathEntities)
         {
             auto &transform = registry.GetComponent<ECS::Components::Transform>(pathEntity);
-            transform.translation.x = transform.translation.x - pathVelocity;
+            transform.translation.x = transform.translation.x - debugSettings.pathVelocity;
 
             if (transform.translation.x <= -5.0f)
                 pathsToRemove.push_back(pathEntity);
@@ -311,7 +331,8 @@ int main(int argc, char **argv)
         }
 
         // 1.2 Create required new paths ===============================================================================
-        if (const auto &lastPathTransform = registry.GetComponent<ECS::Components::Transform>(pathEntities.front()); lastPathTransform.translation.x <= 15.0f)
+        if (const auto &lastPathTransform = registry.GetComponent<ECS::Components::Transform>(pathEntities.front());
+            lastPathTransform.translation.x <= 50.0f)
         {
             const ECS::Entity e = registry.CreateEntity();
             registry
@@ -384,14 +405,54 @@ int main(int argc, char **argv)
             if (ImGui::Checkbox("Set grid mode", &gridMode))
                 std::cout << std::format("Grid mode: {}\n", gridMode ? "enabled" : "disabled");
 
-            if (ImGui::DragFloat("Camera move speed", &cameraMoveSpeed))
-                camera.SetMoveSpeed(cameraMoveSpeed);
+            if (ImGui::DragFloat("Camera move speed", &debugSettings.cameraMoveSpeed))
+                camera.SetMoveSpeed(debugSettings.cameraMoveSpeed);
 
-            if (ImGui::DragFloat("Camera turn speed", &cameraTurnSpeed))
-                camera.SetTurnSpeed(cameraTurnSpeed);
+            if (ImGui::DragFloat("Camera turn speed", &debugSettings.cameraTurnSpeed))
+                camera.SetTurnSpeed(debugSettings.cameraTurnSpeed);
 
-            ImGui::DragFloat("Road speed", &pathVelocity, 0.001f, 0.0f);
+            ImGui::DragFloat("Road speed", &debugSettings.pathVelocity, 0.001f, 0.0f);
 
+            ImGui::End();
+
+            ImGui::Begin("Lights control");
+
+            if (ImGui::Button("Add light"))
+            {
+                pointLights.Add({.position = {0.0f, 0.0f, 2.0f, 0.0f},
+                                 .ambient = {0.1f, 0.1f, 0.1f, 0.0f},
+                                 .diffuse = {1.0f, 1.0f, 1.0f, 0.0f},
+                                 .specular = {1.0f, 1.0f, 1.0f, 0.0f},
+                                 .constant = 1.0f,
+                                 .linear = 0.09f,
+                                 .quadratic = 0.032f,
+                                 .isTurnedOn = true});
+            }
+
+            for (size_t i = 0; i < pointLights.Size(); ++i)
+            {
+                Lights::PointLight &pLight = pointLights[i];
+                ImGui::PushID(std::format("PL{}", i).c_str());
+                ImGui::Columns(3, "Position");
+                ImGui::DragFloat("X", &pLight.position.x);
+                ImGui::NextColumn();
+                ImGui::DragFloat("Y", &pLight.position.y);
+                ImGui::NextColumn();
+                ImGui::DragFloat("Z", &pLight.position.z);
+                ImGui::Columns(1);
+                ImGui::SeparatorText(std::format("Pointlight {}", i).c_str());
+                ImGui::SliderFloat("Constant", &pLight.constant, 0.0, 1.0);
+                ImGui::SliderFloat("Linear", &pLight.linear, 0.0, 1.0);
+                ImGui::SliderFloat("Quadratic", &pLight.quadratic, 0.0, 1.0);
+                ImGui::Checkbox("Is turned on", reinterpret_cast<bool *>(&pLight.isTurnedOn));
+                ImGui::ColorEdit3("Color", reinterpret_cast<float *>(&pLight.diffuse), ImGuiColorEditFlags_Float);
+                pointLights.UpdateIndex(i);
+
+                if (ImGui::Button(std::format("Delete", i).c_str()))
+                    pointLights.Remove(i);
+
+                ImGui::PopID();
+            }
             ImGui::End();
         }
         // endregion
@@ -405,6 +466,8 @@ int main(int argc, char **argv)
         window.EndGui();
         window.EndRenderPass();
     }
+
+    SaveSettings();
 
     alutExit();
 
