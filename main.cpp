@@ -32,6 +32,7 @@
 #include <AL/al.h>
 #include <AL/alut.h>
 
+#include <deque>
 #include <iostream>
 
 #define RGBCOLOR(r, g, b) glm::vec3(r / 255.0f, g / 255.0f, b / 255.0f)
@@ -63,6 +64,7 @@ float fps = 0;
 
 // region Models Section
 Model oxxoStore("./assets/models/OxxoStore/OxxoStore.obj");
+Model pathChunk01("./assets/models/Path/Path.obj");
 // endregion Models Section
 
 Input::Keyboard &keyboard = *Input::Keyboard::GetInstance();
@@ -83,6 +85,12 @@ Primitives::Cube cube;
 
 ECS::Registry registry;
 ECS::SystemManager systemManager;
+
+// region Game Variables
+std::deque<ECS::Entity> pathEntities;
+float pathVelocity = 0.01f;
+
+// endregion Game Variables
 
 void ConfigureKeys(Window &window)
 {
@@ -113,7 +121,7 @@ void ConfigureKeys(Window &window)
                      });
 }
 
-int main(int argc, char** argv)
+int main(int argc, char **argv)
 {
     Window window(1280, 720, "Proyecto Final CGA");
 
@@ -139,6 +147,7 @@ int main(int argc, char** argv)
     Resources::ResourceManager::InitDefaultResources();
 
     oxxoStore.Load();
+    pathChunk01.Load();
 
     // clang-format off
 	Skybox skybox({
@@ -156,6 +165,7 @@ int main(int argc, char** argv)
     Shader skyboxShader = *resources.GetShader("skybox_shader");
     Shader gridShader = *resources.GetShader("infinite_grid");
     Shader fbPixelShader = *resources.GetShader("fb_pixel");
+    Shader debugShader = *resources.GetShader("debug");
 
     Framebuffer pixelFrameBuffer(fbPixelShader, window.GetWidth(), window.GetHeight());
     pixelFrameBuffer.SetMaxResolution(WIDTH, pixelFbResolution);
@@ -194,11 +204,21 @@ int main(int argc, char** argv)
     // region Entities
     ECS::Entity oxxoStoreEntity = registry.CreateEntity();
     registry.AddComponent(oxxoStoreEntity, ECS::Components::Transform{
-                                               .translation = {0.0f, 0.0f, 0.0f},
-                                               .scale = {0.1f, 0.1f, 0.1f}});
-    registry.AddComponent(oxxoStoreEntity, ECS::Components::MeshRenderer{
-                                               .model = &oxxoStore,
-                                               .shader = &shader});
+                                               .translation = {-5.0f, 0.0f, 0.0f},
+                                               .scale = {0.1f, 0.1f, 0.1f}})
+        .AddComponent(oxxoStoreEntity, ECS::Components::MeshRenderer{.model = &oxxoStore, .shader = &shader});
+
+    for (int i = 0; i < 2; i++)
+    {
+        const ECS::Entity e = registry.CreateEntity();
+        const float diffX = (2.0f * static_cast<float>(i)) - 5.0f;
+        registry
+            .AddComponent(e, ECS::Components::Transform{
+                                 .translation = {diffX, 0.0f, 0.0f},
+                                 .scale = glm::vec3(0.1f)})
+            .AddComponent(e, ECS::Components::MeshRenderer{.model = &pathChunk01, .shader = &shader});
+        pathEntities.push_front(e);
+    }
     // endregion Entities
 
     glm::mat4 view;
@@ -270,6 +290,40 @@ int main(int argc, char** argv)
 
         systemManager.UpdateAll(registry, deltaTime);
 
+        // region Game Logic
+
+        // 1.0 Path movement update ====================================================================================
+        std::vector<ECS::Entity> pathsToRemove;
+        for (ECS::Entity pathEntity : pathEntities)
+        {
+            auto &transform = registry.GetComponent<ECS::Components::Transform>(pathEntity);
+            transform.translation.x = transform.translation.x - pathVelocity;
+
+            if (transform.translation.x <= -5.0f)
+                pathsToRemove.push_back(pathEntity);
+        }
+
+        // 1.1 Remove paths out of view ================================================================================
+        for (ECS::Entity e : pathsToRemove)
+        {
+            pathEntities.pop_back();
+            registry.DestroyEntity(e);
+        }
+
+        // 1.2 Create required new paths ===============================================================================
+        if (const auto &lastPathTransform = registry.GetComponent<ECS::Components::Transform>(pathEntities.front()); lastPathTransform.translation.x <= 15.0f)
+        {
+            const ECS::Entity e = registry.CreateEntity();
+            registry
+                .AddComponent(e, ECS::Components::Transform{
+                                     .translation = {lastPathTransform.translation.x + 2.0f, 0.0f, 0.0f},
+                                     .scale = glm::vec3(0.1f)})
+                .AddComponent(e, ECS::Components::MeshRenderer{.model = &pathChunk01, .shader = &shader});
+            pathEntities.push_front(e);
+        }
+
+        // endregion Game Logic
+
         glEnable(GL_BLEND);
         glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
@@ -296,7 +350,6 @@ int main(int argc, char** argv)
         // region gui
         if (showDebugGui)
         {
-
             ImGui::Begin("Camera info");
             auto camPos = camera.GetPosition();
             auto camDir = camera.GetDirection();
@@ -315,6 +368,7 @@ int main(int argc, char** argv)
             ImGui::Checkbox("Enable skybox", &enableSkybox);
 
             ImGui::SeparatorText("Pixelate effect settings");
+
             ImGui::Checkbox("Enable pixelate", &enablePixelate);
             ImGui::SliderInt("Resolution (width)", &pixelFbResolution, 64, 2048);
 
@@ -335,6 +389,8 @@ int main(int argc, char** argv)
 
             if (ImGui::DragFloat("Camera turn speed", &cameraTurnSpeed))
                 camera.SetTurnSpeed(cameraTurnSpeed);
+
+            ImGui::DragFloat("Road speed", &pathVelocity, 0.001f, 0.0f);
 
             ImGui::End();
         }
