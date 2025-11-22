@@ -58,7 +58,7 @@ bool enableCursor = true;
 bool enableGrid = true;
 bool enableSkybox = false;
 bool enablePixelate = true;
-bool gridMode = false;
+bool polygonMode = false;
 int pixelFbResolution = 320;
 int lastPixelFbResolution = 320;
 
@@ -222,6 +222,11 @@ int main(int argc, char **argv)
     cube.Init();
 
     // region Entities
+    ECS::Entity player = registry.CreateEntity();
+    registry.AddComponent(player, ECS::Components::Transform{
+                                      .translation = glm::vec3(0.0f)})
+        .AddComponent(player, ECS::Components::AABBCollider{.min = glm::vec3(-1.0f), .max = glm::vec3(1.0f)});
+
     ECS::Entity oxxoStoreEntity = registry.CreateEntity();
     registry.AddComponent(oxxoStoreEntity, ECS::Components::Transform{
                                                .translation = {-5.0f, 0.0f, 0.0f},
@@ -282,7 +287,7 @@ int main(int argc, char **argv)
             glEnable(GL_DEPTH_TEST);
         }
 
-        glPolygonMode(GL_FRONT_AND_BACK, gridMode ? GL_LINE : GL_FILL);
+        glPolygonMode(GL_FRONT_AND_BACK, polygonMode ? GL_LINE : GL_FILL);
 
         window.StartGui();
 
@@ -308,6 +313,11 @@ int main(int argc, char **argv)
         shader.Set<4, 4>("projection", projection);
         shader.Set<3>("ambientLightColor", glm::vec3{1.0f, 1.0f, 1.0f});
 
+        shader.Set<3>("directionalLight.direction", glm::vec3(0.0f, -1.0f, 0.0f));
+        shader.Set<3>("directionalLight.ambient", glm::vec3(0.08f, 0.08f, 0.08f));
+        shader.Set<3>("directionalLight.diffuse", glm::vec3(0.08f, 0.08f, 0.08f));
+        shader.Set<3>("directionalLight.specular", glm::vec3(0.08f, 0.08f, 0.08f));
+
         systemManager.UpdateAll(registry, deltaTime);
 
         // region Game Logic
@@ -317,7 +327,7 @@ int main(int argc, char **argv)
         for (ECS::Entity pathEntity : pathEntities)
         {
             auto &transform = registry.GetComponent<ECS::Components::Transform>(pathEntity);
-            transform.translation.x = transform.translation.x - debugSettings.pathVelocity;
+            transform.translation.x = transform.translation.x - debugSettings.pathVelocity * deltaTime;
 
             if (transform.translation.x <= -5.0f)
                 pathsToRemove.push_back(pathEntity);
@@ -357,6 +367,50 @@ int main(int argc, char **argv)
             shader.Use();
         }
 
+        if (debugSettings.showHitboxes)
+        {
+            glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+            debugShader.Use();
+            const GLint debugProjection = debugShader.GetUniformLocation("projection");
+            const GLint debugView = debugShader.GetUniformLocation("view");
+            const GLint debugModel = debugShader.GetUniformLocation("model");
+            const GLint debugColor = debugShader.GetUniformLocation("color");
+            debugShader.Set<3>(debugColor, glm::vec3(1.0f, 1.0f, 0.0f));
+            debugShader.Set<4, 4>(debugProjection, projection);
+            debugShader.Set<4, 4>(debugView, view);
+
+            // AABB Debug draw
+            for (const ECS::Entity colliderEntity : registry.View<ECS::Components::AABBCollider, ECS::Components::Transform>())
+            {
+                const auto &transform = registry.GetComponent<ECS::Components::Transform>(colliderEntity);
+                const auto &collider = registry.GetComponent<ECS::Components::AABBCollider>(colliderEntity);
+                const auto worldCollider = collider.GetWorldAABB(transform);
+
+                auto collidersModel = glm::mat4(1.0f);
+                collidersModel = glm::translate(collidersModel, worldCollider.min + (worldCollider.max - worldCollider.min) * 0.5f);
+                collidersModel = glm::scale(collidersModel, worldCollider.max - worldCollider.min);
+                debugShader.Set<4, 4>(debugModel, collidersModel);
+
+                cube.Render();
+            }
+
+            // OBB Debug draw
+            for (const ECS::Entity obbEntity : registry.View<ECS::Components::OBBCollider, ECS::Components::Transform>())
+            {
+                const auto &transform = registry.GetComponent<ECS::Components::Transform>(obbEntity);
+                const auto &collider = registry.GetComponent<ECS::Components::OBBCollider>(obbEntity);
+                const auto worldOBB = collider.GetWorldOBB(transform);
+
+                auto collidersModel = glm::mat4(1.0f);
+                collidersModel = glm::translate(collidersModel, worldOBB.center);
+                collidersModel *= glm::mat4_cast(worldOBB.rotation);
+                collidersModel = glm::scale(collidersModel, worldOBB.halfExtents * 2.0f);
+                debugShader.Set<4, 4>(debugModel, collidersModel);
+
+                cube.Render();
+            }
+            glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+        }
         glDisable(GL_BLEND);
 
         if (enablePixelate)
@@ -385,12 +439,15 @@ int main(int argc, char **argv)
             ImGui::Begin("Engine Info and Settings");
             ImGui::Text("Delta time = %f", static_cast<double>(deltaTime));
             ImGui::Text("FPS = %f", static_cast<double>(fps));
-            ImGui::Checkbox("Enable Grid", &enableGrid);
-            ImGui::Checkbox("Enable skybox", &enableSkybox);
+            if (ImGui::Checkbox("Vsync", &debugSettings.enableVsync))
+                window.EnableVsync(debugSettings.enableVsync);
+            ImGui::Checkbox("Grid", &enableGrid);
+            ImGui::Checkbox("Skybox", &enableSkybox);
+            ImGui::Checkbox("Show Hitboxes", &debugSettings.showHitboxes);
 
             ImGui::SeparatorText("Pixelate effect settings");
 
-            ImGui::Checkbox("Enable pixelate", &enablePixelate);
+            ImGui::Checkbox("Pixelate framebuffer", &enablePixelate);
             ImGui::SliderInt("Resolution (width)", &pixelFbResolution, 64, 2048);
 
             ImGui::SeparatorText("Shader reload");
@@ -398,12 +455,11 @@ int main(int argc, char **argv)
             if (ImGui::Button("Reload base shader"))
             {
                 shader.ReloadShader();
-                std::cout << "Shader reloaded";
+                std::cout << "Shader reloaded\n";
             }
 
             ImGui::SeparatorText("Other settings");
-            if (ImGui::Checkbox("Set grid mode", &gridMode))
-                std::cout << std::format("Grid mode: {}\n", gridMode ? "enabled" : "disabled");
+            ImGui::Checkbox("Show polygon lines", &polygonMode);
 
             if (ImGui::DragFloat("Camera move speed", &debugSettings.cameraMoveSpeed))
                 camera.SetMoveSpeed(debugSettings.cameraMoveSpeed);

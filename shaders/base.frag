@@ -25,6 +25,13 @@ struct Material {
     bool textured;
 };
 
+struct DirectionalLight {
+    vec3 direction;
+    vec3 ambient;
+    vec3 diffuse;
+    vec3 specular;
+};
+
 struct PointLight {
     vec4 position;
 
@@ -47,6 +54,7 @@ layout (std430, binding = 3) buffer pointLights
 };
 
 uniform Material material;
+uniform DirectionalLight directionalLight;
 
 vec4 CalcPointLight(PointLight light, vec3 normal)
 {
@@ -71,6 +79,22 @@ vec4 CalcPointLight(PointLight light, vec3 normal)
     return vec4((ambient + diffuse + specular), texture(texture_diffuse, uTexCoords).a);
 }
 
+vec4 CalcDirectionalLight(DirectionalLight light, vec3 normal)
+{
+    vec3 ambient = light.ambient.rgb * texture(texture_diffuse, uTexCoords).rgb;
+
+    vec3 lightDir = normalize(-light.direction);
+    float diff = max(dot(normal, lightDir), 0.0f);
+    vec3 diffuse = light.diffuse.rgb * diff * texture(texture_diffuse, uTexCoords).rgb;
+
+    vec3 viewDir = normalize(FragView);
+    vec3 reflectDir = reflect(-lightDir, normal);
+    float spec = pow(max(dot(viewDir, reflectDir), 1.0f), material.shininess);
+    vec3 specular = light.specular.rgb * spec * texture(texture_specular, uTexCoords).rgb;
+
+    return vec4((ambient + diffuse + specular), texture(texture_diffuse, uTexCoords).a);
+}
+
 void main()
 {
     vec3 normal = texture(texture_normal, uTexCoords).rgb;
@@ -79,10 +103,13 @@ void main()
 
     vec4 totalColor = vec4(0.0f);
 
+    totalColor += CalcDirectionalLight(directionalLight, normal);
+
     for (int i = 0; i < pointLightsSize; i++) {
         if (!pointLightsData[i].isTurnedOn) continue;
         totalColor += CalcPointLight(pointLightsData[i], normal);
     }
 
-    outColor = totalColor;
+    float gamma = 2.2;
+    outColor.rgb = pow(totalColor.rgb, vec3(1.0f / gamma));
 }

@@ -5,11 +5,13 @@
 
 struct DebugSettings
 {
-    float pathVelocity = 0.01f;
-    float cameraMoveSpeed = 150.0f;
+    float pathVelocity = 1.0f;
+    float cameraMoveSpeed = 5.0f;
     float cameraTurnSpeed = 75.0f;
     bool enablePixelate = true;
     int pixelateResolution = 320;
+    bool enableVsync = true;
+    bool showHitboxes = false;
 };
 
 inline void from_json(const nlohmann::json &j, DebugSettings &settings)
@@ -19,6 +21,8 @@ inline void from_json(const nlohmann::json &j, DebugSettings &settings)
     if (j.contains("camera_turn_speed")) j.at("camera_turn_speed").get_to(settings.cameraTurnSpeed);
     if (j.contains("enable_pixelate")) j.at("enable_pixelate").get_to(settings.enablePixelate);
     if (j.contains("pixelate_resolution")) j.at("pixelate_resolution").get_to(settings.pixelateResolution);
+    if (j.contains("enable_vsync")) j.at("enable_vsync").get_to(settings.enableVsync);
+    if (j.contains("show_hitboxes")) j.at("show_hitboxes").get_to(settings.showHitboxes);
 }
 
 inline void to_json(nlohmann::json &j, const DebugSettings &settings)
@@ -29,6 +33,8 @@ inline void to_json(nlohmann::json &j, const DebugSettings &settings)
         {"camera_turn_speed", settings.cameraTurnSpeed},
         {"enable_pixelate", settings.enablePixelate},
         {"pixelate_resolution", settings.pixelateResolution},
+        {"enable_vsync", settings.enableVsync},
+        {"show_hitboxes", settings.showHitboxes},
     };
 }
 
