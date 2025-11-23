@@ -103,30 +103,30 @@ float pathVelocity = 0.01f;
 void ConfigureKeys(Window &window)
 {
     keyboard
-    .AddCallback(GLFW_KEY_ESCAPE, [&window]() -> void
-                 {
-                     window.SetShouldClose(true);
-                 })
-    .AddCallback(GLFW_KEY_T, [&window]() -> void
-                 {
-                     if (enableCursorEvent) return;
-                     enableCursorEvent = true;
-                     enableCursor = !enableCursor;
-                     mouse.ToggleMouse(enableCursor);
-                     window.SetMouseStatus(enableCursor);
-                 })
-    .AddCallback(GLFW_KEY_F11, [&window]() -> void
-                 {
-                     if (fullscreenEvent) return;
-                     fullscreenEvent = true;
-                     window.ToggleFullscreen();
-                 })
-    .AddCallback(GLFW_KEY_F3, []() -> void
-                 {
-                     if (debugMode.event) return;
-                     debugMode.event = true;
-                     showDebugGui = !showDebugGui;
-                 });
+        .AddCallback(GLFW_KEY_ESCAPE, [&window]() -> void
+                     {
+                         window.SetShouldClose(true);
+                     })
+        .AddCallback(GLFW_KEY_T, [&window]() -> void
+                     {
+                         if (enableCursorEvent) return;
+                         enableCursorEvent = true;
+                         enableCursor = !enableCursor;
+                         mouse.ToggleMouse(enableCursor);
+                         window.SetMouseStatus(enableCursor);
+                     })
+        .AddCallback(GLFW_KEY_F11, [&window]() -> void
+                     {
+                         if (fullscreenEvent) return;
+                         fullscreenEvent = true;
+                         window.ToggleFullscreen();
+                     })
+        .AddCallback(GLFW_KEY_F3, []() -> void
+                     {
+                         if (debugMode.event) return;
+                         debugMode.event = true;
+                         showDebugGui = !showDebugGui;
+                     });
 }
 
 void LoadSettings()
@@ -212,14 +212,14 @@ int main(int argc, char **argv)
 
     StorageBufferDynamicArray<Lights::PointLight> pointLights(3);
     pointLights.Add({
-    .position = {2.0f, 2.0f, 2.0f, 0.0f},
-    .ambient = {0.1f, 0.1f, 0.1f, 0.0f},
-    .diffuse = {0.9f, 0.7f, 0.7f, 0.0f},
-    .specular = {1.0f, 1.0f, 1.0f, 0.0f},
-    .constant = 1.0f,
-    .linear = 0.09f,
-    .quadratic = 0.032f,
-    .isTurnedOn = true
+        .position = {2.0f, 2.0f, 2.0f, 0.0f},
+        .ambient = {0.1f, 0.1f, 0.1f, 0.0f},
+        .diffuse = {0.9f, 0.7f, 0.7f, 0.0f},
+        .specular = {1.0f, 1.0f, 1.0f, 0.0f},
+        .constant = 1.0f,
+        .linear = 0.09f,
+        .quadratic = 0.032f,
+        .isTurnedOn = true
     });
 
     ConfigureKeys(window);
@@ -230,38 +230,46 @@ int main(int argc, char **argv)
     // region Entities
     ECS::Entity player = registry.CreateEntity();
     registry
-    .AddComponent(player, ECS::Components::Transform{
-                          .translation = {0.0f, 2.0f, 0.0f}
+        .AddComponent(player, ECS::Components::Transform{
+                                  .translation = {0.0f, 2.0f, 0.0f}
     })
-    .AddComponent(player, RunnerComponent{})
-    .AddComponent(player, ECS::Components::AABBCollider{.min = {-0.5f, -1.0f, -0.5f}, .max = {0.5f, 1.0f, 0.5f}});
+        .AddComponent(player, RunnerComponent{})
+        .AddComponent(player, ECS::Components::AABBCollider{.min = {-0.5f, -1.0f, -0.5f}, .max = {0.5f, 1.0f, 0.5f}});
 
     ECS::Entity floor = registry.CreateEntity();
     registry
-    .AddComponent(floor, ECS::Components::Transform{
-                         .translation = {0.0f, 0.0f, 0.0f},
-                         .scale = glm::vec3(0.1f)
+        .AddComponent(floor, ECS::Components::Transform{
+                                 .translation = {0.0f, 0.0f, 0.0f},
+                                 .scale = glm::vec3(0.1f)
     })
-    .AddComponent(floor, ECS::Components::AABBCollider{.min = {-10.0f, -0.5f, -25.31f}, .max = {10.0f, 0.5f, 25.31f}})
-    .AddComponent(floor, FloorComponent{});
+        .AddComponent(floor, ECS::Components::AABBCollider{.min = {-10.0f, -0.5f, -25.31f}, .max = {10.0f, 0.5f, 25.31f}})
+        .AddComponent(floor, FloorComponent{});
+
+    ECS::Entity debugDummy = registry.CreateEntity();
+    registry.AddComponent(debugDummy, ECS::Components::Transform{
+                                          .translation = {0.0f, 2.0f, 0.0f}
+    })
+        .AddComponent(debugDummy, ECS::Components::AABBCollider{.min = {-0.5f, -1.0f, -0.5f}, .max = {0.5f, 1.0f, 0.5f}});
+    // !Only enable when is required
+    registry.DestroyEntity(debugDummy);
 
     ECS::Entity oxxoStoreEntity = registry.CreateEntity();
     registry.AddComponent(oxxoStoreEntity, ECS::Components::Transform{
-                                           .translation = {-5.0f, 0.0f, -5.0f},
-                                           .scale = {0.1f,  0.1f, 0.1f }
+                                               .translation = {-5.0f, 0.0f, -5.0f},
+                                               .scale = {0.1f,  0.1f, 0.1f }
     })
-    .AddComponent(oxxoStoreEntity, ECS::Components::MeshRenderer{.model = &oxxoStore, .shader = &shader});
+        .AddComponent(oxxoStoreEntity, ECS::Components::MeshRenderer{.model = &oxxoStore, .shader = &shader});
 
     for (int i = 0; i < 2; i++)
     {
         const ECS::Entity e = registry.CreateEntity();
         const float diffX = (2.0f * static_cast<float>(i)) - 5.0f;
         registry
-        .AddComponent(e, ECS::Components::Transform{
-                         .translation = {diffX, 0.0f, 0.0f},
-                         .scale = glm::vec3(0.1f)
+            .AddComponent(e, ECS::Components::Transform{
+                                 .translation = {diffX, 0.0f, 0.0f},
+                                 .scale = glm::vec3(0.1f)
         })
-        .AddComponent(e, ECS::Components::MeshRenderer{.model = &pathChunk01, .shader = &shader});
+            .AddComponent(e, ECS::Components::MeshRenderer{.model = &pathChunk01, .shader = &shader});
         pathEntities.push_front(e);
     }
     // endregion Entities
@@ -319,10 +327,10 @@ int main(int argc, char **argv)
         if (enableSkybox)
         {
             skybox
-            .BeginRender(skyboxShader)
-            .SetProjection(projection)
-            .SetView(view)
-            .Render();
+                .BeginRender(skyboxShader)
+                .SetProjection(projection)
+                .SetView(view)
+                .Render();
         }
 
         shader.Use();
@@ -366,10 +374,10 @@ int main(int argc, char **argv)
         {
             const ECS::Entity e = registry.CreateEntity();
             registry.AddComponent(e, ECS::Components::Transform{
-                                     .translation = {lastPathTransform.translation.x + 2.0f, 0.0f, 0.0f},
-                                     .scale = glm::vec3(0.1f)
+                                         .translation = {lastPathTransform.translation.x + 2.0f, 0.0f, 0.0f},
+                                         .scale = glm::vec3(0.1f)
             })
-            .AddComponent(e, ECS::Components::MeshRenderer{.model = &pathChunk01, .shader = &shader});
+                .AddComponent(e, ECS::Components::MeshRenderer{.model = &pathChunk01, .shader = &shader});
             pathEntities.push_front(e);
         }
 
@@ -406,7 +414,17 @@ int main(int argc, char **argv)
                 const auto &collider = registry.GetComponent<ECS::Components::AABBCollider>(colliderEntity);
                 const auto worldCollider = collider.GetWorldAABB(transform);
 
-                debugShader.Set<3>(debugColor, collider.isColliding ? glm::vec3(1.0f, 0.0f, 0.0f) : glm::vec3(1.0f, 1.0f, 0.0f));
+                // Only to differentiate floor&player grounding from other colliders
+                if ((registry.HasComponent<RunnerComponent>(colliderEntity)
+                     && collider.collidingEntities.size() == 1
+                     && std::ranges::find(collider.collidingEntities, floor) != collider.collidingEntities.end())
+                    || (registry.HasComponent<FloorComponent>(colliderEntity)
+                        && std::ranges::find(collider.collidingEntities, player) != collider.collidingEntities.end()))
+                    debugShader.Set<3>(debugColor, glm::vec3(0.0f, 1.0f, 1.0f));
+                else
+                    debugShader.Set<3>(debugColor, collider.isColliding
+                                                       ? glm::vec3(1.0f, 0.0f, 0.0f)
+                                                       : glm::vec3(1.0f, 1.0f, 0.0f));
 
                 auto collidersModel = glm::mat4(1.0f);
                 collidersModel = glm::translate(collidersModel, worldCollider.min + (worldCollider.max - worldCollider.min) * 0.5f);
@@ -504,14 +522,14 @@ int main(int argc, char **argv)
             if (ImGui::Button("Add light"))
             {
                 pointLights.Add({
-                .position = {0.0f, 0.0f, 2.0f, 0.0f},
-                .ambient = {0.1f, 0.1f, 0.1f, 0.0f},
-                .diffuse = {1.0f, 1.0f, 1.0f, 0.0f},
-                .specular = {1.0f, 1.0f, 1.0f, 0.0f},
-                .constant = 1.0f,
-                .linear = 0.09f,
-                .quadratic = 0.032f,
-                .isTurnedOn = true
+                    .position = {0.0f, 0.0f, 2.0f, 0.0f},
+                    .ambient = {0.1f, 0.1f, 0.1f, 0.0f},
+                    .diffuse = {1.0f, 1.0f, 1.0f, 0.0f},
+                    .specular = {1.0f, 1.0f, 1.0f, 0.0f},
+                    .constant = 1.0f,
+                    .linear = 0.09f,
+                    .quadratic = 0.032f,
+                    .isTurnedOn = true
                 });
             }
 

@@ -21,4 +21,3 @@ AlignArrayOfStructures: Left
 BreakBeforeBinaryOperators: All
 BreakConstructorInitializers: AfterColon
 IndentWrappedFunctionNames: false
-ContinuationIndentWidth: 0
