@@ -7,6 +7,8 @@
 // endregion Global Include
 
 #include "Camera.h"
+#include "Components/FloorComponent.h"
+#include "Components/RunnerComponent.h"
 #include "DebugSettings.h"
 #include "ECS/Components/Collider.h"
 #include "ECS/Components/MeshRenderer.h"
@@ -15,12 +17,10 @@
 #include "ECS/Registry.h"
 #include "ECS/SystemManager.h"
 #include "ECS/Systems/CollisionSystem.h"
-#include "ECS/Systems/PlayerControlSystem.h"
 #include "ECS/Systems/RenderSystem.h"
 #include "Input/Keyboard.h"
 #include "Lights/PointLight.h"
 #include "Model.h"
-#include "Primitives/AbstractPrimitive.h"
 #include "Primitives/Cube.h"
 #include "Primitives/Plane.h"
 #include "Resources/ResourceManager.h"
@@ -28,8 +28,10 @@
 #include "SkinnedAnimation.h"
 #include "Skybox.h"
 #include "StorageBufferDynamicArray.h"
+#include "Systems/RunnerSystem.h"
 #include "Window.h"
 #include "imgui.h"
+
 #include <AL/alut.h>
 #include <nlohmann/json.hpp>
 
@@ -101,30 +103,30 @@ float pathVelocity = 0.01f;
 void ConfigureKeys(Window &window)
 {
     keyboard
-        .AddCallback(GLFW_KEY_ESCAPE, [&window]() -> void
-                     {
-                         window.SetShouldClose(true);
-                     })
-        .AddCallback(GLFW_KEY_T, [&window]() -> void
-                     {
-                         if (enableCursorEvent) return;
-                         enableCursorEvent = true;
-                         enableCursor = !enableCursor;
-                         mouse.ToggleMouse(enableCursor);
-                         window.SetMouseStatus(enableCursor);
-                     })
-        .AddCallback(GLFW_KEY_F11, [&window]() -> void
-                     {
-                         if (fullscreenEvent) return;
-                         fullscreenEvent = true;
-                         window.ToggleFullscreen();
-                     })
-        .AddCallback(GLFW_KEY_F3, []() -> void
-                     {
-                         if (debugMode.event) return;
-                         debugMode.event = true;
-                         showDebugGui = !showDebugGui;
-                     });
+    .AddCallback(GLFW_KEY_ESCAPE, [&window]() -> void
+                 {
+                     window.SetShouldClose(true);
+                 })
+    .AddCallback(GLFW_KEY_T, [&window]() -> void
+                 {
+                     if (enableCursorEvent) return;
+                     enableCursorEvent = true;
+                     enableCursor = !enableCursor;
+                     mouse.ToggleMouse(enableCursor);
+                     window.SetMouseStatus(enableCursor);
+                 })
+    .AddCallback(GLFW_KEY_F11, [&window]() -> void
+                 {
+                     if (fullscreenEvent) return;
+                     fullscreenEvent = true;
+                     window.ToggleFullscreen();
+                 })
+    .AddCallback(GLFW_KEY_F3, []() -> void
+                 {
+                     if (debugMode.event) return;
+                     debugMode.event = true;
+                     showDebugGui = !showDebugGui;
+                 });
 }
 
 void LoadSettings()
@@ -162,9 +164,11 @@ int main(int argc, char **argv)
     registry.RegisterComponent<ECS::Components::AABBCollider>();
     registry.RegisterComponent<ECS::Components::SBBCollider>();
     registry.RegisterComponent<ECS::Components::OBBCollider>();
+    registry.RegisterComponent<RunnerComponent>();
+    registry.RegisterComponent<FloorComponent>();
     systemManager.RegisterSystem<ECS::Systems::CollisionSystem>();
     systemManager.RegisterSystem<ECS::Systems::RenderSystem>();
-    systemManager.RegisterSystem<ECS::Systems::PlayerControlSystem>();
+    systemManager.RegisterSystem<RunnerSystem>();
 
     resources.ScanResources();
     Resources::ResourceManager::InitDefaultResources();
@@ -207,14 +211,16 @@ int main(int argc, char **argv)
     window.SetMouseStatus(enableCursor);
 
     StorageBufferDynamicArray<Lights::PointLight> pointLights(3);
-    pointLights.Add({.position = {2.0f, 2.0f, 2.0f, 0.0f},
-                     .ambient = {0.1f, 0.1f, 0.1f, 0.0f},
-                     .diffuse = {0.9f, 0.7f, 0.7f, 0.0f},
-                     .specular = {1.0f, 1.0f, 1.0f, 0.0f},
-                     .constant = 1.0f,
-                     .linear = 0.09f,
-                     .quadratic = 0.032f,
-                     .isTurnedOn = true});
+    pointLights.Add({
+    .position = {2.0f, 2.0f, 2.0f, 0.0f},
+    .ambient = {0.1f, 0.1f, 0.1f, 0.0f},
+    .diffuse = {0.9f, 0.7f, 0.7f, 0.0f},
+    .specular = {1.0f, 1.0f, 1.0f, 0.0f},
+    .constant = 1.0f,
+    .linear = 0.09f,
+    .quadratic = 0.032f,
+    .isTurnedOn = true
+    });
 
     ConfigureKeys(window);
 
@@ -223,25 +229,39 @@ int main(int argc, char **argv)
 
     // region Entities
     ECS::Entity player = registry.CreateEntity();
-    registry.AddComponent(player, ECS::Components::Transform{
-                                      .translation = glm::vec3(0.0f)})
-        .AddComponent(player, ECS::Components::AABBCollider{.min = glm::vec3(-1.0f), .max = glm::vec3(1.0f)});
+    registry
+    .AddComponent(player, ECS::Components::Transform{
+                          .translation = {0.0f, 2.0f, 0.0f}
+    })
+    .AddComponent(player, RunnerComponent{})
+    .AddComponent(player, ECS::Components::AABBCollider{.min = {-0.5f, -1.0f, -0.5f}, .max = {0.5f, 1.0f, 0.5f}});
+
+    ECS::Entity floor = registry.CreateEntity();
+    registry
+    .AddComponent(floor, ECS::Components::Transform{
+                         .translation = {0.0f, 0.0f, 0.0f},
+                         .scale = glm::vec3(0.1f)
+    })
+    .AddComponent(floor, ECS::Components::AABBCollider{.min = {-10.0f, -0.5f, -25.31f}, .max = {10.0f, 0.5f, 25.31f}})
+    .AddComponent(floor, FloorComponent{});
 
     ECS::Entity oxxoStoreEntity = registry.CreateEntity();
     registry.AddComponent(oxxoStoreEntity, ECS::Components::Transform{
-                                               .translation = {-5.0f, 0.0f, 0.0f},
-                                               .scale = {0.1f, 0.1f, 0.1f}})
-        .AddComponent(oxxoStoreEntity, ECS::Components::MeshRenderer{.model = &oxxoStore, .shader = &shader});
+                                           .translation = {-5.0f, 0.0f, -5.0f},
+                                           .scale = {0.1f,  0.1f, 0.1f }
+    })
+    .AddComponent(oxxoStoreEntity, ECS::Components::MeshRenderer{.model = &oxxoStore, .shader = &shader});
 
     for (int i = 0; i < 2; i++)
     {
         const ECS::Entity e = registry.CreateEntity();
         const float diffX = (2.0f * static_cast<float>(i)) - 5.0f;
         registry
-            .AddComponent(e, ECS::Components::Transform{
-                                 .translation = {diffX, 0.0f, 0.0f},
-                                 .scale = glm::vec3(0.1f)})
-            .AddComponent(e, ECS::Components::MeshRenderer{.model = &pathChunk01, .shader = &shader});
+        .AddComponent(e, ECS::Components::Transform{
+                         .translation = {diffX, 0.0f, 0.0f},
+                         .scale = glm::vec3(0.1f)
+        })
+        .AddComponent(e, ECS::Components::MeshRenderer{.model = &pathChunk01, .shader = &shader});
         pathEntities.push_front(e);
     }
     // endregion Entities
@@ -299,10 +319,10 @@ int main(int argc, char **argv)
         if (enableSkybox)
         {
             skybox
-                .BeginRender(skyboxShader)
-                .SetProjection(projection)
-                .SetView(view)
-                .Render();
+            .BeginRender(skyboxShader)
+            .SetProjection(projection)
+            .SetView(view)
+            .Render();
         }
 
         shader.Use();
@@ -345,11 +365,11 @@ int main(int argc, char **argv)
             lastPathTransform.translation.x <= 50.0f)
         {
             const ECS::Entity e = registry.CreateEntity();
-            registry
-                .AddComponent(e, ECS::Components::Transform{
+            registry.AddComponent(e, ECS::Components::Transform{
                                      .translation = {lastPathTransform.translation.x + 2.0f, 0.0f, 0.0f},
-                                     .scale = glm::vec3(0.1f)})
-                .AddComponent(e, ECS::Components::MeshRenderer{.model = &pathChunk01, .shader = &shader});
+                                     .scale = glm::vec3(0.1f)
+            })
+            .AddComponent(e, ECS::Components::MeshRenderer{.model = &pathChunk01, .shader = &shader});
             pathEntities.push_front(e);
         }
 
@@ -386,6 +406,8 @@ int main(int argc, char **argv)
                 const auto &collider = registry.GetComponent<ECS::Components::AABBCollider>(colliderEntity);
                 const auto worldCollider = collider.GetWorldAABB(transform);
 
+                debugShader.Set<3>(debugColor, collider.isColliding ? glm::vec3(1.0f, 0.0f, 0.0f) : glm::vec3(1.0f, 1.0f, 0.0f));
+
                 auto collidersModel = glm::mat4(1.0f);
                 collidersModel = glm::translate(collidersModel, worldCollider.min + (worldCollider.max - worldCollider.min) * 0.5f);
                 collidersModel = glm::scale(collidersModel, worldCollider.max - worldCollider.min);
@@ -400,6 +422,8 @@ int main(int argc, char **argv)
                 const auto &transform = registry.GetComponent<ECS::Components::Transform>(obbEntity);
                 const auto &collider = registry.GetComponent<ECS::Components::OBBCollider>(obbEntity);
                 const auto worldOBB = collider.GetWorldOBB(transform);
+
+                debugShader.Set<3>(debugColor, collider.isColliding ? glm::vec3(1.0f, 0.0f, 0.0f) : glm::vec3(1.0f, 1.0f, 0.0f));
 
                 auto collidersModel = glm::mat4(1.0f);
                 collidersModel = glm::translate(collidersModel, worldOBB.center);
@@ -428,12 +452,16 @@ int main(int argc, char **argv)
             ImGui::Begin("Camera info");
             auto camPos = camera.GetPosition();
             auto camDir = camera.GetDirection();
-            ImGui::Text("Position: x=%f y=%f z=%f", static_cast<double>(camPos.x), static_cast<double>(camPos.y),
-                        static_cast<double>(camPos.z));
-            ImGui::Text("Direction: x=%f y=%f z=%f", static_cast<double>(camDir.x), static_cast<double>(camDir.y),
-                        static_cast<double>(camDir.z));
-            ImGui::Text("Yaw = %f | Pitch = %f", static_cast<double>(camera.GetYaw()),
-                        static_cast<double>(camera.GetPitch()));
+            ImGui::Text("Position: x=%f y=%f z=%f", static_cast<double>(camPos.x), static_cast<double>(camPos.y), static_cast<double>(camPos.z));
+            ImGui::Text("Direction: x=%f y=%f z=%f", static_cast<double>(camDir.x), static_cast<double>(camDir.y), static_cast<double>(camDir.z));
+            ImGui::Text("Yaw = %f | Pitch = %f", static_cast<double>(camera.GetYaw()), static_cast<double>(camera.GetPitch()));
+            ImGui::End();
+
+            ImGui::Begin("Player info");
+            const auto &playerTransform = registry.GetComponent<ECS::Components::Transform>(player);
+            ImGui::Text("Position: x=%f y=%f z=%f", static_cast<double>(playerTransform.translation.x),
+                        static_cast<double>(playerTransform.translation.y),
+                        static_cast<double>(playerTransform.translation.z));
             ImGui::End();
 
             ImGui::Begin("Engine Info and Settings");
@@ -475,14 +503,16 @@ int main(int argc, char **argv)
 
             if (ImGui::Button("Add light"))
             {
-                pointLights.Add({.position = {0.0f, 0.0f, 2.0f, 0.0f},
-                                 .ambient = {0.1f, 0.1f, 0.1f, 0.0f},
-                                 .diffuse = {1.0f, 1.0f, 1.0f, 0.0f},
-                                 .specular = {1.0f, 1.0f, 1.0f, 0.0f},
-                                 .constant = 1.0f,
-                                 .linear = 0.09f,
-                                 .quadratic = 0.032f,
-                                 .isTurnedOn = true});
+                pointLights.Add({
+                .position = {0.0f, 0.0f, 2.0f, 0.0f},
+                .ambient = {0.1f, 0.1f, 0.1f, 0.0f},
+                .diffuse = {1.0f, 1.0f, 1.0f, 0.0f},
+                .specular = {1.0f, 1.0f, 1.0f, 0.0f},
+                .constant = 1.0f,
+                .linear = 0.09f,
+                .quadratic = 0.032f,
+                .isTurnedOn = true
+                });
             }
 
             for (size_t i = 0; i < pointLights.Size(); ++i)

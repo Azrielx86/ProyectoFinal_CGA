@@ -16,3 +16,9 @@ AllowShortIfStatementsOnASingleLine: true
 AllowShortEnumsOnASingleLine: true
 SeparateDefinitionBlocks: Always
 AllowShortLambdasOnASingleLine: None
+AlignAfterOpenBracket: Align
+AlignArrayOfStructures: Left
+BreakBeforeBinaryOperators: All
+BreakConstructorInitializers: AfterColon
+IndentWrappedFunctionNames: false
+ContinuationIndentWidth: 0

@@ -35,7 +35,12 @@ endif ()
 
 add_executable(ProyectoFinal_CGA src/main.cpp
         src/GameSettings.h
-        src/DebugSettings.h)
+        src/DebugSettings.h
+        src/Components/RunnerComponent.h
+        src/Systems/RunnerSystem.cpp
+        src/Systems/RunnerSystem.h
+        src/Components/FloorComponent.h
+)
 
 if (NOT USE_DEBUG_ASSETS)
     message(STATUS "Copying shader files.")

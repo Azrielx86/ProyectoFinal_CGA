@@ -1,0 +1,12 @@
+//
+// Created by tohka on 11/22/25.
+//
+
+#ifndef PROYECTOFINAL_CGA_FLOORCOMPONENT_H
+#define PROYECTOFINAL_CGA_FLOORCOMPONENT_H
+
+struct FloorComponent
+{
+};
+
+#endif // PROYECTOFINAL_CGA_FLOORCOMPONENT_H
