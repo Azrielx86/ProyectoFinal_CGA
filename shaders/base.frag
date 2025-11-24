@@ -6,9 +6,10 @@ in vec3 FragPos;
 in vec3 FragView;
 in vec3 Normal;
 in mat3 TBN;
+in float visibility;
 
+uniform vec3 fogColor;
 uniform vec3 ambientLightColor;
-
 uniform sampler2D texture_diffuse;
 uniform sampler2D texture_specular;
 uniform sampler2D texture_emissive;
@@ -109,6 +110,8 @@ void main()
         if (!pointLightsData[i].isTurnedOn) continue;
         totalColor += CalcPointLight(pointLightsData[i], normal);
     }
+
+    totalColor = mix(vec4(fogColor, 1.0f), totalColor, visibility);
 
     float gamma = 2.2;
     outColor.rgb = pow(totalColor.rgb, vec3(1.0f / gamma));

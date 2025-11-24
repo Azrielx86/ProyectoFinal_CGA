@@ -68,6 +68,10 @@ void RunnerSystem::Update(ECS::Registry &registry, float deltaTime)
 
     transform.translation += runner.velocity * deltaTime;
 
+    // transform.translation.y = glm::clamp(transform.translation.y, 0.0f, transform.translation.y);
+    if (transform.translation.y < 0.0f)
+    transform.translation.y = 1.0f;
+
     const bool leftDown = kb->GetKeyPress(GLFW_KEY_LEFT);
     if (leftDown && !leftPressed)
     {

@@ -11,9 +11,9 @@ struct RunnerComponent
 {
     bool isJumping = false;
     bool grounded = false;
-    float weight = 0.8f;
+    float weight = 2.0f;
     float moveSpeed = 5.0f;
-    float jumpForce = 5.0f;
+    float jumpForce = 8.0f;
     glm::vec3 velocity{0.0f};
 };
 

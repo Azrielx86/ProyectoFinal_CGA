@@ -35,9 +35,11 @@
 #include <AL/alut.h>
 #include <nlohmann/json.hpp>
 
+#include <chrono>
 #include <deque>
 #include <fstream>
 #include <iostream>
+#include <random>
 
 #define RGBCOLOR(r, g, b) glm::vec3(r / 255.0f, g / 255.0f, b / 255.0f)
 
@@ -84,6 +86,26 @@ struct Uniforms
     GLint model = 0;
 };
 
+enum PATH_PATTERN
+{
+    CLEAN,
+    OBSTACLE,
+    POWERUP
+};
+
+constexpr std::array ObstaclePatterns = {
+    std::array{OBSTACLE, CLEAN,    CLEAN   },
+    std::array{CLEAN,    OBSTACLE, CLEAN   },
+    std::array{CLEAN,    CLEAN,    OBSTACLE},
+    std::array{OBSTACLE, OBSTACLE, CLEAN   },
+    std::array{OBSTACLE, OBSTACLE,    OBSTACLE},
+    std::array{OBSTACLE, CLEAN,    OBSTACLE},
+};
+
+std::random_device randomDevice;
+std::mt19937 generator(randomDevice());
+std::uniform_int_distribution<int> obstaclePatternGenerator(0, ObstaclePatterns.size() - 1);
+
 Uniforms uniforms{};
 
 Primitives::Plane plane;
@@ -96,7 +118,11 @@ DebugSettings debugSettings;
 
 // region Game Variables
 std::deque<ECS::Entity> pathEntities;
-float pathVelocity = 0.01f;
+std::deque<ECS::Entity> obstaclesEntities;
+float metersRunned = 0.0f;
+int pathsGenerated = 0;
+bool obstaclesCanSpawn = false;
+constexpr int generatorSpaceInterval = 8;
 
 // endregion Game Variables
 
@@ -255,8 +281,8 @@ int main(int argc, char **argv)
 
     ECS::Entity oxxoStoreEntity = registry.CreateEntity();
     registry.AddComponent(oxxoStoreEntity, ECS::Components::Transform{
-                                               .translation = {-5.0f, 0.0f, -5.0f},
-                                               .scale = {0.1f,  0.1f, 0.1f }
+                                               .translation = {5.0f, 0.0f, -8.5f},
+                                               .scale = glm::vec3(0.25f)
     })
         .AddComponent(oxxoStoreEntity, ECS::Components::MeshRenderer{.model = &oxxoStore, .shader = &shader});
 
@@ -277,6 +303,9 @@ int main(int argc, char **argv)
     glm::mat4 view;
     glm::mat4 projection;
 
+    // * ===================================================================== *
+    // *                             GAME LOOP                                 *
+    // * ===================================================================== *
     while (!window.ShouldClose())
     {
         auto now = static_cast<float>(glfwGetTime());
@@ -340,6 +369,7 @@ int main(int argc, char **argv)
         shader.Set<4, 4>("view", view);
         shader.Set<4, 4>("projection", projection);
         shader.Set<3>("ambientLightColor", glm::vec3{1.0f, 1.0f, 1.0f});
+        shader.Set<3>("fogColor", glm::vec3(0.0f));
 
         shader.Set<3>("directionalLight.direction", glm::vec3(0.0f, -1.0f, 0.0f));
         shader.Set<3>("directionalLight.ambient", glm::vec3(0.08f, 0.08f, 0.08f));
@@ -349,7 +379,10 @@ int main(int argc, char **argv)
         systemManager.UpdateAll(registry, deltaTime);
 
         // region Game Logic
-
+        metersRunned += debugSettings.pathVelocity * deltaTime;
+        // * ================================================================= *
+        // * Path Generation                                                   *
+        // * ================================================================= *
         // 1.0 Path movement update ====================================================================================
         std::vector<ECS::Entity> pathsToRemove;
         for (ECS::Entity pathEntity : pathEntities)
@@ -370,7 +403,7 @@ int main(int argc, char **argv)
 
         // 1.2 Create required new paths ===============================================================================
         if (const auto &lastPathTransform = registry.GetComponent<ECS::Components::Transform>(pathEntities.front());
-            lastPathTransform.translation.x <= 50.0f)
+            lastPathTransform.translation.x <= 100.0f)
         {
             const ECS::Entity e = registry.CreateEntity();
             registry.AddComponent(e, ECS::Components::Transform{
@@ -379,6 +412,55 @@ int main(int argc, char **argv)
             })
                 .AddComponent(e, ECS::Components::MeshRenderer{.model = &pathChunk01, .shader = &shader});
             pathEntities.push_front(e);
+            pathsGenerated = (pathsGenerated + 1) % generatorSpaceInterval;
+            obstaclesCanSpawn = true;
+        }
+
+        // * ================================================================= *
+        // * Obstacles generation                                              *
+        // * ================================================================= *
+        std::vector<ECS::Entity> obstaclesToRemove;
+        // 2.1 Update obstacles ================================================
+        for (const ECS::Entity obstacle : obstaclesEntities)
+        {
+            auto &transform = registry.GetComponent<ECS::Components::Transform>(obstacle);
+            transform.translation.x = transform.translation.x - debugSettings.pathVelocity * deltaTime;
+
+            if (transform.translation.x <= -5.0f)
+                obstaclesToRemove.push_back(obstacle);
+        }
+
+        // 2.2 Remove obstacles out of view ====================================
+        for (const ECS::Entity obstacle : obstaclesToRemove)
+        {
+            obstaclesEntities.pop_back();
+            registry.DestroyEntity(obstacle);
+        }
+
+        // 2.3 Create new obstacles ============================================
+        if (pathsGenerated == 0 && obstaclesCanSpawn)
+        {
+            const auto &lastPathTransform = registry.GetComponent<ECS::Components::Transform>(pathEntities.front());
+
+            const int genIdx = obstaclePatternGenerator(generator);
+            auto pattern = ObstaclePatterns[genIdx];
+
+            for (size_t i = 0; i < pattern.size(); i++)
+            {
+                if (pattern[i] == CLEAN) continue;
+
+                constexpr float laneWidth = 2.0f;
+                float obstaclePos = (static_cast<float>(i) * laneWidth) - laneWidth;
+                ECS::Entity obstacle = registry.CreateEntity();
+                registry
+                    .AddComponent(obstacle, ECS::Components::Transform{
+                                                .translation = {lastPathTransform.translation.x, 1.0f, obstaclePos}
+                })
+                    .AddComponent(obstacle, ECS::Components::AABBCollider{.min = glm::vec3(-0.5f), .max = glm::vec3(0.5f)});
+
+                obstaclesEntities.push_front(obstacle);
+                obstaclesCanSpawn = false;
+            }
         }
 
         // endregion Game Logic
@@ -480,11 +562,15 @@ int main(int argc, char **argv)
             ImGui::Text("Position: x=%f y=%f z=%f", static_cast<double>(playerTransform.translation.x),
                         static_cast<double>(playerTransform.translation.y),
                         static_cast<double>(playerTransform.translation.z));
+            ImGui::Text("Meters runned: %.2f", static_cast<double>(metersRunned));
             ImGui::End();
 
             ImGui::Begin("Engine Info and Settings");
+            ImGui::Text("Game Time: %.2f", glfwGetTime());
             ImGui::Text("Delta time = %f", static_cast<double>(deltaTime));
             ImGui::Text("FPS = %f", static_cast<double>(fps));
+            ImGui::Text("Paths generated: %d", pathsGenerated);
+            ImGui::Text("Entities in scene: %lu", registry.GetEntityCount());
             if (ImGui::Checkbox("Vsync", &debugSettings.enableVsync))
                 window.EnableVsync(debugSettings.enableVsync);
             ImGui::Checkbox("Grid", &enableGrid);

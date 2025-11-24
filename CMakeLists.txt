@@ -27,8 +27,8 @@ add_link_options(-Wall -Wextra -Wconversion -Wdouble-promotion -Wno-sign-convers
 
 if (CMAKE_BUILD_TYPE STREQUAL "Debug")
     message(STATUS "Compiling Debug version.")
-    add_compile_options(-O0 -gfull -DDEBUG -fno-inline -fstack-protector-all -fsanitize=address,undefined -fsanitize-trap)
-    add_link_options(-O0 -gfull -DDEBUG -fno-inline -fstack-protector-all -fsanitize=address,undefined -fsanitize-trap)
+    add_compile_options(-O0 -gfull -DDEBUG -fno-inline -fstack-protector-all)
+    add_link_options(-O0 -gfull -DDEBUG -fno-inline -fstack-protector-all)
 else ()
     add_compile_options(-O3)
 endif ()

@@ -13,6 +13,7 @@ out vec3 Normal;
 out vec3 FragPos;
 out vec3 FragView;
 out mat3 TBN;
+out float visibility;
 
 const int MAX_BONES = 200;
 const int MAX_BONE_INFLUENCE = 4;
@@ -22,6 +23,8 @@ uniform int numBones;
 uniform mat4 view;
 uniform mat4 projection;
 uniform mat4 model;
+uniform float density = 0.025;
+uniform float gradient = 1.5;
 
 void main() {
     uTexCoords = uv;
@@ -52,6 +55,12 @@ void main() {
     vec3 N = normalize(vec3(normalMatrix * vec4(normal, 0.0f)));
 
     TBN = mat3(T, B, N);
+
+    // Fog settings
+    vec3 fragPosViewSpace = vec3(view * worldPos);
+    float distance = length(fragPosViewSpace);
+    visibility = exp(-pow((distance * density), gradient));
+    visibility = clamp(visibility, 0.0f, 1.0f);
 
     gl_Position = projection * view * worldPos;
 }
