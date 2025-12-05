@@ -18,6 +18,7 @@
 #include "ECS/SystemManager.h"
 #include "ECS/Systems/CollisionSystem.h"
 #include "ECS/Systems/RenderSystem.h"
+#include "FontType.h"
 #include "Input/Keyboard.h"
 #include "Lights/PointLight.h"
 #include "Model.h"
@@ -98,7 +99,7 @@ constexpr std::array ObstaclePatterns = {
     std::array{CLEAN,    OBSTACLE, CLEAN   },
     std::array{CLEAN,    CLEAN,    OBSTACLE},
     std::array{OBSTACLE, OBSTACLE, CLEAN   },
-    std::array{OBSTACLE, OBSTACLE,    OBSTACLE},
+    std::array{OBSTACLE, OBSTACLE, OBSTACLE},
     std::array{OBSTACLE, CLEAN,    OBSTACLE},
 };
 
@@ -247,6 +248,9 @@ int main(int argc, char **argv)
         .quadratic = 0.032f,
         .isTurnedOn = true
     });
+
+    FontType font(static_cast<float>(window.GetWidth()), static_cast<float>(window.GetHeight()), "../fonts/SuperCroissant.ttf", 1.2f);
+    font.Init();
 
     ConfigureKeys(window);
 
@@ -536,6 +540,8 @@ int main(int argc, char **argv)
             glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
         }
         glDisable(GL_BLEND);
+
+        font.Render(-0.99f, 0.99f, std::format("DISTANCE: {}", metersRunned));
 
         if (enablePixelate)
         {
