@@ -72,8 +72,16 @@ float fpsCount = 0;
 float fps = 0;
 
 // region Models Section
-Model oxxoStore("./assets/models/OxxoStore/OxxoStore.obj");
-Model pathChunk01("./assets/models/Path/Path.obj");
+Model oxxoStore(
+#if defined(DEBUG) || defined(USE_DEBUG_ASSETS)
+    "."
+#endif
+    "./assets/models/OxxoStore/OxxoStore.obj");
+Model pathChunk01(
+#if defined(DEBUG) || defined(USE_DEBUG_ASSETS)
+    "."
+#endif
+    "./assets/models/Path/Path.obj");
 // endregion Models Section
 
 Input::Keyboard &keyboard = *Input::Keyboard::GetInstance();
@@ -249,7 +257,7 @@ int main(int argc, char **argv)
         .isTurnedOn = true
     });
 
-    FontType font(static_cast<float>(window.GetWidth()), static_cast<float>(window.GetHeight()), "../fonts/SuperCroissant.ttf", 1.2f);
+    FontType font(static_cast<float>(window.GetWidth()), static_cast<float>(window.GetHeight()), "../fonts/BearDays.ttf", 1.2f);
     font.Init();
 
     ConfigureKeys(window);
@@ -541,7 +549,7 @@ int main(int argc, char **argv)
         }
         glDisable(GL_BLEND);
 
-        font.Render(-0.99f, 0.99f, std::format("DISTANCE: {}", metersRunned));
+        font.Render(-0.99f, 0.99f, std::format("DISTANCE: {:.0f}", metersRunned));
 
         if (enablePixelate)
         {

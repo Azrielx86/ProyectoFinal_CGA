@@ -49,6 +49,7 @@ if (NOT USE_DEBUG_ASSETS)
     file(COPY assets DESTINATION ${PROJECT_BINARY_DIR})
 else ()
     message(STATUS "Using debug assets.")
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DUSE_DEBUG_ASSETS")
 endif ()
 
 target_link_libraries(ProyectoFinal_CGA PUBLIC AzxEngineGL)
