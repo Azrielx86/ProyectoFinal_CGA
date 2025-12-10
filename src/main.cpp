@@ -44,6 +44,13 @@
 
 #define RGBCOLOR(r, g, b) glm::vec3(r / 255.0f, g / 255.0f, b / 255.0f)
 
+enum GameScene
+{
+    MAINMENU,
+    INGAME,
+    GAMEOVER
+};
+
 struct SingleKeyPress
 {
     bool clicked = true;
@@ -51,6 +58,7 @@ struct SingleKeyPress
 };
 
 SingleKeyPress debugMode;
+GameScene gameScene = MAINMENU;
 
 const std::string debugSettingsPath = "./debug_settings.json";
 
@@ -66,6 +74,7 @@ bool enablePixelate = true;
 bool polygonMode = false;
 int pixelFbResolution = 320;
 int lastPixelFbResolution = 320;
+bool mainGameStarted = false;
 
 float fpsCounter = 0;
 float fpsCount = 0;
@@ -123,6 +132,11 @@ Primitives::Cube cube;
 ECS::Registry registry;
 ECS::SystemManager systemManager;
 
+ECS::Entity player;
+ECS::Entity floorEntity;
+ECS::Entity debugDummy;
+ECS::Entity oxxoStoreEntity;
+
 DebugSettings debugSettings;
 
 // region Game Variables
@@ -179,6 +193,56 @@ void SaveSettings()
     }
 }
 
+void LoadInGameEntities(Shader &shader)
+{
+    // region Entities
+    player = registry.CreateEntity();
+    registry
+        .AddComponent(player, ECS::Components::Transform{
+                                  .translation = {0.0f, 2.0f, 0.0f}
+    })
+        .AddComponent(player, RunnerComponent{})
+        .AddComponent(player, ECS::Components::AABBCollider{.min = {-0.5f, -1.0f, -0.5f}, .max = {0.5f, 1.0f, 0.5f}});
+
+    floorEntity = registry.CreateEntity();
+    registry
+        .AddComponent(floorEntity, ECS::Components::Transform{
+                                       .translation = {0.0f, 0.0f, 0.0f},
+                                       .scale = glm::vec3(0.1f)
+    })
+        .AddComponent(floorEntity, ECS::Components::AABBCollider{.min = {-10.0f, -0.5f, -25.31f}, .max = {10.0f, 0.5f, 25.31f}})
+        .AddComponent(floorEntity, FloorComponent{});
+
+    debugDummy = registry.CreateEntity();
+    registry.AddComponent(debugDummy, ECS::Components::Transform{
+                                          .translation = {0.0f, 2.0f, 0.0f}
+    })
+        .AddComponent(debugDummy, ECS::Components::AABBCollider{.min = {-0.5f, -1.0f, -0.5f}, .max = {0.5f, 1.0f, 0.5f}});
+    // !Only enable when is required
+    registry.DestroyEntity(debugDummy);
+
+    oxxoStoreEntity = registry.CreateEntity();
+    registry.AddComponent(oxxoStoreEntity, ECS::Components::Transform{
+                                               .translation = {5.0f, 0.0f, -8.5f},
+                                               .scale = glm::vec3(0.25f)
+    })
+        .AddComponent(oxxoStoreEntity, ECS::Components::MeshRenderer{.model = &oxxoStore, .shader = &shader});
+
+    for (int i = 0; i < 2; i++)
+    {
+        const ECS::Entity e = registry.CreateEntity();
+        const float diffX = (2.0f * static_cast<float>(i)) - 5.0f;
+        registry
+            .AddComponent(e, ECS::Components::Transform{
+                                 .translation = {diffX, 0.0f, 0.0f},
+                                 .scale = glm::vec3(0.1f)
+        })
+            .AddComponent(e, ECS::Components::MeshRenderer{.model = &pathChunk01, .shader = &shader});
+        pathEntities.push_front(e);
+    }
+    // endregion Entities
+}
+
 int main(int argc, char **argv)
 {
     Window window(1280, 720, "Proyecto Final CGA");
@@ -204,6 +268,9 @@ int main(int argc, char **argv)
     systemManager.RegisterSystem<ECS::Systems::CollisionSystem>();
     systemManager.RegisterSystem<ECS::Systems::RenderSystem>();
     systemManager.RegisterSystem<RunnerSystem>();
+
+    auto runnerSystem = systemManager.GetSystem<RunnerSystem>();
+    runnerSystem->SetEnabled(false);
 
     resources.ScanResources();
     Resources::ResourceManager::InitDefaultResources();
@@ -264,53 +331,6 @@ int main(int argc, char **argv)
 
     plane.Init();
     cube.Init();
-
-    // region Entities
-    ECS::Entity player = registry.CreateEntity();
-    registry
-        .AddComponent(player, ECS::Components::Transform{
-                                  .translation = {0.0f, 2.0f, 0.0f}
-    })
-        .AddComponent(player, RunnerComponent{})
-        .AddComponent(player, ECS::Components::AABBCollider{.min = {-0.5f, -1.0f, -0.5f}, .max = {0.5f, 1.0f, 0.5f}});
-
-    ECS::Entity floor = registry.CreateEntity();
-    registry
-        .AddComponent(floor, ECS::Components::Transform{
-                                 .translation = {0.0f, 0.0f, 0.0f},
-                                 .scale = glm::vec3(0.1f)
-    })
-        .AddComponent(floor, ECS::Components::AABBCollider{.min = {-10.0f, -0.5f, -25.31f}, .max = {10.0f, 0.5f, 25.31f}})
-        .AddComponent(floor, FloorComponent{});
-
-    ECS::Entity debugDummy = registry.CreateEntity();
-    registry.AddComponent(debugDummy, ECS::Components::Transform{
-                                          .translation = {0.0f, 2.0f, 0.0f}
-    })
-        .AddComponent(debugDummy, ECS::Components::AABBCollider{.min = {-0.5f, -1.0f, -0.5f}, .max = {0.5f, 1.0f, 0.5f}});
-    // !Only enable when is required
-    registry.DestroyEntity(debugDummy);
-
-    ECS::Entity oxxoStoreEntity = registry.CreateEntity();
-    registry.AddComponent(oxxoStoreEntity, ECS::Components::Transform{
-                                               .translation = {5.0f, 0.0f, -8.5f},
-                                               .scale = glm::vec3(0.25f)
-    })
-        .AddComponent(oxxoStoreEntity, ECS::Components::MeshRenderer{.model = &oxxoStore, .shader = &shader});
-
-    for (int i = 0; i < 2; i++)
-    {
-        const ECS::Entity e = registry.CreateEntity();
-        const float diffX = (2.0f * static_cast<float>(i)) - 5.0f;
-        registry
-            .AddComponent(e, ECS::Components::Transform{
-                                 .translation = {diffX, 0.0f, 0.0f},
-                                 .scale = glm::vec3(0.1f)
-        })
-            .AddComponent(e, ECS::Components::MeshRenderer{.model = &pathChunk01, .shader = &shader});
-        pathEntities.push_front(e);
-    }
-    // endregion Entities
 
     glm::mat4 view;
     glm::mat4 projection;
@@ -390,166 +410,179 @@ int main(int argc, char **argv)
 
         systemManager.UpdateAll(registry, deltaTime);
 
-        // region Game Logic
-        metersRunned += debugSettings.pathVelocity * deltaTime;
-        // * ================================================================= *
-        // * Path Generation                                                   *
-        // * ================================================================= *
-        // 1.0 Path movement update ====================================================================================
-        std::vector<ECS::Entity> pathsToRemove;
-        for (ECS::Entity pathEntity : pathEntities)
+        switch (gameScene)
         {
-            auto &transform = registry.GetComponent<ECS::Components::Transform>(pathEntity);
-            transform.translation.x = transform.translation.x - debugSettings.pathVelocity * deltaTime;
+        case MAINMENU:
+        {
 
-            if (transform.translation.x <= -5.0f)
-                pathsToRemove.push_back(pathEntity);
+            break;
         }
-
-        // 1.1 Remove paths out of view ================================================================================
-        for (ECS::Entity e : pathsToRemove)
+        case INGAME:
         {
-            pathEntities.pop_back();
-            registry.DestroyEntity(e);
-        }
-
-        // 1.2 Create required new paths ===============================================================================
-        if (const auto &lastPathTransform = registry.GetComponent<ECS::Components::Transform>(pathEntities.front());
-            lastPathTransform.translation.x <= 100.0f)
-        {
-            const ECS::Entity e = registry.CreateEntity();
-            registry.AddComponent(e, ECS::Components::Transform{
-                                         .translation = {lastPathTransform.translation.x + 2.0f, 0.0f, 0.0f},
-                                         .scale = glm::vec3(0.1f)
-            })
-                .AddComponent(e, ECS::Components::MeshRenderer{.model = &pathChunk01, .shader = &shader});
-            pathEntities.push_front(e);
-            pathsGenerated = (pathsGenerated + 1) % generatorSpaceInterval;
-            obstaclesCanSpawn = true;
-        }
-
-        // * ================================================================= *
-        // * Obstacles generation                                              *
-        // * ================================================================= *
-        std::vector<ECS::Entity> obstaclesToRemove;
-        // 2.1 Update obstacles ================================================
-        for (const ECS::Entity obstacle : obstaclesEntities)
-        {
-            auto &transform = registry.GetComponent<ECS::Components::Transform>(obstacle);
-            transform.translation.x = transform.translation.x - debugSettings.pathVelocity * deltaTime;
-
-            if (transform.translation.x <= -5.0f)
-                obstaclesToRemove.push_back(obstacle);
-        }
-
-        // 2.2 Remove obstacles out of view ====================================
-        for (const ECS::Entity obstacle : obstaclesToRemove)
-        {
-            obstaclesEntities.pop_back();
-            registry.DestroyEntity(obstacle);
-        }
-
-        // 2.3 Create new obstacles ============================================
-        if (pathsGenerated == 0 && obstaclesCanSpawn)
-        {
-            const auto &lastPathTransform = registry.GetComponent<ECS::Components::Transform>(pathEntities.front());
-
-            const int genIdx = obstaclePatternGenerator(generator);
-            auto pattern = ObstaclePatterns[genIdx];
-
-            for (size_t i = 0; i < pattern.size(); i++)
+            // region Game Logic
+            metersRunned += debugSettings.pathVelocity * deltaTime;
+            // * ================================================================= *
+            // * Path Generation                                                   *
+            // * ================================================================= *
+            // 1.0 Path movement update ====================================================================================
+            std::vector<ECS::Entity> pathsToRemove;
+            for (ECS::Entity pathEntity : pathEntities)
             {
-                if (pattern[i] == CLEAN) continue;
+                auto &transform = registry.GetComponent<ECS::Components::Transform>(pathEntity);
+                transform.translation.x = transform.translation.x - debugSettings.pathVelocity * deltaTime;
 
-                constexpr float laneWidth = 2.0f;
-                float obstaclePos = (static_cast<float>(i) * laneWidth) - laneWidth;
-                ECS::Entity obstacle = registry.CreateEntity();
-                registry
-                    .AddComponent(obstacle, ECS::Components::Transform{
-                                                .translation = {lastPathTransform.translation.x, 1.0f, obstaclePos}
+                if (transform.translation.x <= -5.0f)
+                    pathsToRemove.push_back(pathEntity);
+            }
+
+            // 1.1 Remove paths out of view ================================================================================
+            for (ECS::Entity e : pathsToRemove)
+            {
+                pathEntities.pop_back();
+                registry.DestroyEntity(e);
+            }
+
+            // 1.2 Create required new paths ===============================================================================
+            if (const auto &lastPathTransform = registry.GetComponent<ECS::Components::Transform>(pathEntities.front());
+                lastPathTransform.translation.x <= 100.0f)
+            {
+                const ECS::Entity e = registry.CreateEntity();
+                registry.AddComponent(e, ECS::Components::Transform{
+                                             .translation = {lastPathTransform.translation.x + 2.0f, 0.0f, 0.0f},
+                                             .scale = glm::vec3(0.1f)
                 })
-                    .AddComponent(obstacle, ECS::Components::AABBCollider{.min = glm::vec3(-0.5f), .max = glm::vec3(0.5f)});
-
-                obstaclesEntities.push_front(obstacle);
-                obstaclesCanSpawn = false;
+                    .AddComponent(e, ECS::Components::MeshRenderer{.model = &pathChunk01, .shader = &shader});
+                pathEntities.push_front(e);
+                pathsGenerated = (pathsGenerated + 1) % generatorSpaceInterval;
+                obstaclesCanSpawn = true;
             }
-        }
 
-        // endregion Game Logic
-
-        glEnable(GL_BLEND);
-        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-
-        if (enableGrid)
-        {
-            gridShader.Use();
-            gridShader.Set<4, 4>("uVP", projection * view);
-            gridShader.Set<3>("cameraPosition", camera.GetPosition());
-            plane.Render();
-            shader.Use();
-        }
-
-        if (debugSettings.showHitboxes)
-        {
-            glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
-            debugShader.Use();
-            const GLint debugProjection = debugShader.GetUniformLocation("projection");
-            const GLint debugView = debugShader.GetUniformLocation("view");
-            const GLint debugModel = debugShader.GetUniformLocation("model");
-            const GLint debugColor = debugShader.GetUniformLocation("color");
-            debugShader.Set<3>(debugColor, glm::vec3(1.0f, 1.0f, 0.0f));
-            debugShader.Set<4, 4>(debugProjection, projection);
-            debugShader.Set<4, 4>(debugView, view);
-
-            // AABB Debug draw
-            for (const ECS::Entity colliderEntity : registry.View<ECS::Components::AABBCollider, ECS::Components::Transform>())
+            // * ================================================================= *
+            // * Obstacles generation                                              *
+            // * ================================================================= *
+            std::vector<ECS::Entity> obstaclesToRemove;
+            // 2.1 Update obstacles ================================================
+            for (const ECS::Entity obstacle : obstaclesEntities)
             {
-                const auto &transform = registry.GetComponent<ECS::Components::Transform>(colliderEntity);
-                const auto &collider = registry.GetComponent<ECS::Components::AABBCollider>(colliderEntity);
-                const auto worldCollider = collider.GetWorldAABB(transform);
+                auto &transform = registry.GetComponent<ECS::Components::Transform>(obstacle);
+                transform.translation.x = transform.translation.x - debugSettings.pathVelocity * deltaTime;
 
-                // Only to differentiate floor&player grounding from other colliders
-                if ((registry.HasComponent<RunnerComponent>(colliderEntity)
-                     && collider.collidingEntities.size() == 1
-                     && std::ranges::find(collider.collidingEntities, floor) != collider.collidingEntities.end())
-                    || (registry.HasComponent<FloorComponent>(colliderEntity)
-                        && std::ranges::find(collider.collidingEntities, player) != collider.collidingEntities.end()))
-                    debugShader.Set<3>(debugColor, glm::vec3(0.0f, 1.0f, 1.0f));
-                else
-                    debugShader.Set<3>(debugColor, collider.isColliding
-                                                       ? glm::vec3(1.0f, 0.0f, 0.0f)
-                                                       : glm::vec3(1.0f, 1.0f, 0.0f));
-
-                auto collidersModel = glm::mat4(1.0f);
-                collidersModel = glm::translate(collidersModel, worldCollider.min + (worldCollider.max - worldCollider.min) * 0.5f);
-                collidersModel = glm::scale(collidersModel, worldCollider.max - worldCollider.min);
-                debugShader.Set<4, 4>(debugModel, collidersModel);
-
-                cube.Render();
+                if (transform.translation.x <= -5.0f)
+                    obstaclesToRemove.push_back(obstacle);
             }
 
-            // OBB Debug draw
-            for (const ECS::Entity obbEntity : registry.View<ECS::Components::OBBCollider, ECS::Components::Transform>())
+            // 2.2 Remove obstacles out of view ====================================
+            for (const ECS::Entity obstacle : obstaclesToRemove)
             {
-                const auto &transform = registry.GetComponent<ECS::Components::Transform>(obbEntity);
-                const auto &collider = registry.GetComponent<ECS::Components::OBBCollider>(obbEntity);
-                const auto worldOBB = collider.GetWorldOBB(transform);
-
-                debugShader.Set<3>(debugColor, collider.isColliding ? glm::vec3(1.0f, 0.0f, 0.0f) : glm::vec3(1.0f, 1.0f, 0.0f));
-
-                auto collidersModel = glm::mat4(1.0f);
-                collidersModel = glm::translate(collidersModel, worldOBB.center);
-                collidersModel *= glm::mat4_cast(worldOBB.rotation);
-                collidersModel = glm::scale(collidersModel, worldOBB.halfExtents * 2.0f);
-                debugShader.Set<4, 4>(debugModel, collidersModel);
-
-                cube.Render();
+                obstaclesEntities.pop_back();
+                registry.DestroyEntity(obstacle);
             }
-            glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
-        }
-        glDisable(GL_BLEND);
 
-        font.Render(-0.99f, 0.99f, std::format("DISTANCE: {:.0f}", metersRunned));
+            // 2.3 Create new obstacles ============================================
+            if (pathsGenerated == 0 && obstaclesCanSpawn)
+            {
+                const auto &lastPathTransform = registry.GetComponent<ECS::Components::Transform>(pathEntities.front());
+
+                const int genIdx = obstaclePatternGenerator(generator);
+                auto pattern = ObstaclePatterns[genIdx];
+
+                for (size_t i = 0; i < pattern.size(); i++)
+                {
+                    if (pattern[i] == CLEAN) continue;
+
+                    constexpr float laneWidth = 2.0f;
+                    float obstaclePos = (static_cast<float>(i) * laneWidth) - laneWidth;
+                    ECS::Entity obstacle = registry.CreateEntity();
+                    registry
+                        .AddComponent(obstacle, ECS::Components::Transform{
+                                                    .translation = {lastPathTransform.translation.x, 1.0f, obstaclePos}
+                    })
+                        .AddComponent(obstacle, ECS::Components::AABBCollider{.min = glm::vec3(-0.5f), .max = glm::vec3(0.5f)});
+
+                    obstaclesEntities.push_front(obstacle);
+                    obstaclesCanSpawn = false;
+                }
+            }
+
+            glEnable(GL_BLEND);
+            glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+            if (enableGrid)
+            {
+                gridShader.Use();
+                gridShader.Set<4, 4>("uVP", projection * view);
+                gridShader.Set<3>("cameraPosition", camera.GetPosition());
+                plane.Render();
+                shader.Use();
+            }
+
+            if (debugSettings.showHitboxes)
+            {
+                glPolygonMode(GL_FRONT_AND_BACK, GL_LINE);
+                debugShader.Use();
+                const GLint debugProjection = debugShader.GetUniformLocation("projection");
+                const GLint debugView = debugShader.GetUniformLocation("view");
+                const GLint debugModel = debugShader.GetUniformLocation("model");
+                const GLint debugColor = debugShader.GetUniformLocation("color");
+                debugShader.Set<3>(debugColor, glm::vec3(1.0f, 1.0f, 0.0f));
+                debugShader.Set<4, 4>(debugProjection, projection);
+                debugShader.Set<4, 4>(debugView, view);
+
+                // AABB Debug draw
+                for (const ECS::Entity colliderEntity : registry.View<ECS::Components::AABBCollider, ECS::Components::Transform>())
+                {
+                    const auto &transform = registry.GetComponent<ECS::Components::Transform>(colliderEntity);
+                    const auto &collider = registry.GetComponent<ECS::Components::AABBCollider>(colliderEntity);
+                    const auto worldCollider = collider.GetWorldAABB(transform);
+
+                    // Only to differentiate floor&player grounding from other colliders
+                    if ((registry.HasComponent<RunnerComponent>(colliderEntity)
+                         && collider.collidingEntities.size() == 1
+                         && std::ranges::find(collider.collidingEntities, floorEntity) != collider.collidingEntities.end())
+                        || (registry.HasComponent<FloorComponent>(colliderEntity)
+                            && std::ranges::find(collider.collidingEntities, player) != collider.collidingEntities.end()))
+                        debugShader.Set<3>(debugColor, glm::vec3(0.0f, 1.0f, 1.0f));
+                    else
+                        debugShader.Set<3>(debugColor, collider.isColliding
+                                                           ? glm::vec3(1.0f, 0.0f, 0.0f)
+                                                           : glm::vec3(1.0f, 1.0f, 0.0f));
+
+                    auto collidersModel = glm::mat4(1.0f);
+                    collidersModel = glm::translate(collidersModel, worldCollider.min + (worldCollider.max - worldCollider.min) * 0.5f);
+                    collidersModel = glm::scale(collidersModel, worldCollider.max - worldCollider.min);
+                    debugShader.Set<4, 4>(debugModel, collidersModel);
+
+                    cube.Render();
+                }
+
+                // OBB Debug draw
+                for (const ECS::Entity obbEntity : registry.View<ECS::Components::OBBCollider, ECS::Components::Transform>())
+                {
+                    const auto &transform = registry.GetComponent<ECS::Components::Transform>(obbEntity);
+                    const auto &collider = registry.GetComponent<ECS::Components::OBBCollider>(obbEntity);
+                    const auto worldOBB = collider.GetWorldOBB(transform);
+
+                    debugShader.Set<3>(debugColor, collider.isColliding ? glm::vec3(1.0f, 0.0f, 0.0f) : glm::vec3(1.0f, 1.0f, 0.0f));
+
+                    auto collidersModel = glm::mat4(1.0f);
+                    collidersModel = glm::translate(collidersModel, worldOBB.center);
+                    collidersModel *= glm::mat4_cast(worldOBB.rotation);
+                    collidersModel = glm::scale(collidersModel, worldOBB.halfExtents * 2.0f);
+                    debugShader.Set<4, 4>(debugModel, collidersModel);
+
+                    cube.Render();
+                }
+                glPolygonMode(GL_FRONT_AND_BACK, GL_FILL);
+            }
+            glDisable(GL_BLEND);
+
+            font.SetColor({1.0f, 0.0f, 0.0f, 0.5f})
+                .Render(-0.99f, 1.0f, std::format("DISTANCE: {:.0f}", metersRunned));
+            break;
+        }
+            // endregion Game Logic
+        default:;
+        }
 
         if (enablePixelate)
         {
@@ -587,6 +620,18 @@ int main(int argc, char **argv)
             ImGui::Text("Entities in scene: %lu", registry.GetEntityCount());
             if (ImGui::Checkbox("Vsync", &debugSettings.enableVsync))
                 window.EnableVsync(debugSettings.enableVsync);
+
+            if (gameScene == MAINMENU && !mainGameStarted)
+            {
+                if (ImGui::Button("Start Game"))
+                {
+                    LoadInGameEntities(shader);
+                    mainGameStarted = true;
+                    runnerSystem->SetEnabled(true);
+                    gameScene = INGAME;
+                }
+            }
+
             ImGui::Checkbox("Grid", &enableGrid);
             ImGui::Checkbox("Skybox", &enableSkybox);
             ImGui::Checkbox("Show Hitboxes", &debugSettings.showHitboxes);
