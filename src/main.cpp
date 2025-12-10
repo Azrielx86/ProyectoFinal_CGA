@@ -51,6 +51,12 @@ enum GameScene
     GAMEOVER
 };
 
+enum MenuOptions
+{
+    START,
+    EXIT
+};
+
 struct SingleKeyPress
 {
     bool clicked = true;
@@ -58,7 +64,11 @@ struct SingleKeyPress
 };
 
 SingleKeyPress debugMode;
+SingleKeyPress menuUp;
+SingleKeyPress menuDown;
 GameScene gameScene = MAINMENU;
+uint32_t currentOption = 0;
+std::array menuOptions = {START, EXIT};
 
 const std::string debugSettingsPath = "./debug_settings.json";
 
@@ -91,6 +101,11 @@ Model pathChunk01(
     "."
 #endif
     "./assets/models/Path/Path.obj");
+Model tsuruCar(
+#if defined(DEBUG) || defined(USE_DEBUG_ASSETS)
+    "."
+#endif
+    "./assets/models/Tsuru/Tsuru.obj");
 // endregion Models Section
 
 Input::Keyboard &keyboard = *Input::Keyboard::GetInstance();
@@ -228,6 +243,12 @@ void LoadInGameEntities(Shader &shader)
     })
         .AddComponent(oxxoStoreEntity, ECS::Components::MeshRenderer{.model = &oxxoStore, .shader = &shader});
 
+    const auto tsuruEntity = registry.CreateEntity();
+    registry.AddComponent(tsuruEntity, ECS::Components::Transform{
+                                               .translation = {15.0f, 0.0f, -8.0f}
+    })
+        .AddComponent(tsuruEntity, ECS::Components::MeshRenderer{.model = &tsuruCar, .shader = &shader});
+
     for (int i = 0; i < 2; i++)
     {
         const ECS::Entity e = registry.CreateEntity();
@@ -277,6 +298,7 @@ int main(int argc, char **argv)
 
     oxxoStore.Load();
     pathChunk01.Load();
+    tsuruCar.Load();
 
     // clang-format off
 	Skybox skybox({
@@ -414,6 +436,47 @@ int main(int argc, char **argv)
         {
         case MAINMENU:
         {
+            font
+                .SetColor(currentOption == START ? glm::vec4(1.0f) : glm::vec4(0.8f, 0.8f, 0.8f, 1.0f))
+                .Render(0, 0.5, "Start");
+
+            font
+                .SetColor(currentOption == EXIT ? glm::vec4(1.0f) : glm::vec4(0.8f, 0.8f, 0.8f, 1.0f))
+                .Render(0, -0.5, "Exit");
+
+            if (keyboard.GetKeyPress(GLFW_KEY_ENTER))
+            {
+                switch (menuOptions[currentOption])
+                {
+                case START:
+                    LoadInGameEntities(shader);
+                    mainGameStarted = true;
+                    runnerSystem->SetEnabled(true);
+                    gameScene = INGAME;
+                    break;
+                case EXIT:
+                    window.SetShouldClose(true);
+                    break;
+                }
+            }
+
+            if (!menuUp.event && keyboard.GetKeyPress(GLFW_KEY_UP))
+                menuUp.event = true;
+
+            if (!menuDown.event && keyboard.GetKeyPress(GLFW_KEY_DOWN))
+                menuDown.event = true;
+
+            if (menuUp.event && !keyboard.GetKeyPress(GLFW_KEY_UP))
+            {
+                currentOption = (currentOption == 0) ? menuOptions.size() - 1 : currentOption - 1;
+                menuUp.event = false;
+            }
+
+            if (menuDown.event && !keyboard.GetKeyPress(GLFW_KEY_DOWN))
+            {
+                currentOption = (currentOption == menuOptions.size() - 1) ? 0 : currentOption + 1;
+                menuDown.event = false;
+            }
 
             break;
         }
@@ -577,7 +640,7 @@ int main(int argc, char **argv)
             glDisable(GL_BLEND);
 
             font.SetColor({1.0f, 0.0f, 0.0f, 0.5f})
-                .Render(-0.99f, 1.0f, std::format("DISTANCE: {:.0f}", metersRunned));
+                .Render(-0.95f, 0.80f, std::format("DISTANCE: {:.0f}", metersRunned));
             break;
         }
             // endregion Game Logic
