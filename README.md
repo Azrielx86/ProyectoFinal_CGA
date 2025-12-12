@@ -62,3 +62,7 @@ Compilación
 ```bash
 cmake --build .
 ```
+
+## Créditos de los modelos 3D utilizados
+
+* [Bearded man - Low poly animated](https://skfb.ly/oqBtx)

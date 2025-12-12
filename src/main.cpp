@@ -27,6 +27,7 @@
 #include "Resources/ResourceManager.h"
 #include "Shader.h"
 #include "SkinnedAnimation.h"
+#include "SkinnedAnimator.h"
 #include "Skybox.h"
 #include "StorageBufferDynamicArray.h"
 #include "Systems/RunnerSystem.h"
@@ -74,17 +75,18 @@ const std::string debugSettingsPath = "./debug_settings.json";
 
 float deltaTime, lastTime;
 float red = 0.0f;
-bool showDebugGui = true;
+bool showDebugGui = false;
 bool enableCursorEvent = true;
 bool fullscreenEvent;
 bool enableCursor = true;
 bool enableGrid = true;
-bool enableSkybox = false;
+bool enableSkybox = true;
 bool enablePixelate = true;
 bool polygonMode = false;
 int pixelFbResolution = 320;
 int lastPixelFbResolution = 320;
 bool mainGameStarted = false;
+bool useFreeCamera = false;
 
 float fpsCounter = 0;
 float fpsCount = 0;
@@ -106,6 +108,20 @@ Model tsuruCar(
     "."
 #endif
     "./assets/models/Tsuru/Tsuru.obj");
+Model iceCreamCart(
+#if defined(DEBUG) || defined(USE_DEBUG_ASSETS)
+    "."
+#endif
+    "./assets/models/IceCreamCart/IceCreamCart.fbx");
+
+Model lowPolyManModel(
+#if defined(DEBUG) || defined(USE_DEBUG_ASSETS)
+    "."
+#endif
+    "./assets/models/LowPolyMan/LowPolyMan.fbx");
+SkinnedAnimation *playerAnimation;
+SkinnedAnimator playerAnimator;
+
 // endregion Models Section
 
 Input::Keyboard &keyboard = *Input::Keyboard::GetInstance();
@@ -153,6 +169,9 @@ ECS::Entity debugDummy;
 ECS::Entity oxxoStoreEntity;
 
 DebugSettings debugSettings;
+
+Camera *mainCamera;
+Camera *previousUsedCamera;
 
 // region Game Variables
 std::deque<ECS::Entity> pathEntities;
@@ -245,7 +264,7 @@ void LoadInGameEntities(Shader &shader)
 
     const auto tsuruEntity = registry.CreateEntity();
     registry.AddComponent(tsuruEntity, ECS::Components::Transform{
-                                               .translation = {15.0f, 0.0f, -8.0f}
+                                           .translation = {15.0f, 0.0f, -8.0f}
     })
         .AddComponent(tsuruEntity, ECS::Components::MeshRenderer{.model = &tsuruCar, .shader = &shader});
 
@@ -299,6 +318,14 @@ int main(int argc, char **argv)
     oxxoStore.Load();
     pathChunk01.Load();
     tsuruCar.Load();
+    iceCreamCart.Load();
+    lowPolyManModel.Load();
+
+    playerAnimation = lowPolyManModel.GetAnimation(2);
+    if (playerAnimation)
+    {
+        playerAnimator.PlayAnimation(playerAnimation);
+    }
 
     // clang-format off
 	Skybox skybox({
@@ -325,13 +352,24 @@ int main(int argc, char **argv)
 
     window.AddFramebuffer(&pixelFrameBuffer);
 
-    Camera camera({2.0f, 2.0f, 2.0f}, {0.0f, 1.0f, 0.0f});
-    camera.SetInput(Input::Keyboard::GetInstance(), Input::Mouse::GetInstance());
+    Camera freeCamera({2.0f, 2.0f, 2.0f}, {0.0f, 1.0f, 0.0f});
+    Camera menuCamera({3.0f, 1.0f, 2.8f}, {0.0f, 1.0f, 0.0f},
+                      -58.85f, 2.30f, 0, 0);
+    Camera gameCamera({-7.5f, 7.0f, 0.0f}, {0.0f, 1.0f, 0.0f},
+                      0.31f, -26.45f, 0, 0);
+    gameCamera.Lock();
+    menuCamera.Lock();
 
-    camera.SetMoveSpeed(debugSettings.cameraMoveSpeed);
-    camera.SetTurnSpeed(debugSettings.cameraTurnSpeed);
+    mainCamera = &menuCamera;
+    previousUsedCamera = &menuCamera;
 
-    mouse.ToggleMouse(enableCursor);
+    freeCamera.SetInput(Input::Keyboard::GetInstance(), Input::Mouse::GetInstance());
+    gameCamera.SetInput(Input::Keyboard::GetInstance(), Input::Mouse::GetInstance());
+
+    freeCamera.SetMoveSpeed(debugSettings.cameraMoveSpeed);
+    freeCamera.SetTurnSpeed(debugSettings.cameraTurnSpeed);
+
+    // mouse.ToggleMouse(enableCursor);
     window.SetMouseStatus(enableCursor);
 
     StorageBufferDynamicArray<Lights::PointLight> pointLights(3);
@@ -402,10 +440,12 @@ int main(int argc, char **argv)
 
         window.StartGui();
 
-        camera.Move(deltaTime);
+        mainCamera->Move(deltaTime);
 
-        view = camera.GetLookAt();
+        glm::mat4 model(1.0f);
+        view = mainCamera->GetLookAt();
         projection = glm::perspective(glm::radians(45.0f), pixelFrameBuffer.GetAspect(), 0.1f, 100.0f);
+        std::vector<glm::mat4> finalBones;
 
         if (enableSkybox)
         {
@@ -436,13 +476,44 @@ int main(int argc, char **argv)
         {
         case MAINMENU:
         {
+            // region MainMenuScene
+            // draw paths
+            for (unsigned int i = 0; i < 8; i++)
+            {
+                model = glm::mat4(1.0f);
+                model = glm::translate(model, {2.0f * static_cast<float>(i), 0.0f, 0.0f});
+                model = glm::scale(model, glm::vec3(0.1f));
+                shader.Set<4, 4>(uniforms.model, model);
+                pathChunk01.Render(shader);
+            }
+
+            // Render OXXO
+            model = glm::translate(glm::mat4(1.0f), {5.0f, 0.0f, -9.0f});
+            model = glm::scale(model, glm::vec3(0.30f));
+            shader.Set<4, 4>(uniforms.model, model);
+            oxxoStore.Render(shader);
+
+            playerAnimator.UpdateAnimation(deltaTime);
+            finalBones = playerAnimator.GetFinalBoneMatrices();
+            model = glm::translate(glm::mat4(1.0f), {4.0f, 0.0f, 0.0f});
+            model = glm::scale(model, glm::vec3(0.20f));
+            shader.Set<4, 4>(uniforms.model, model);
+            for (unsigned int i = 0; i < finalBones.size(); i++)
+                shader.Set<4, 4>(std::format("bones[{}]", i).c_str(), finalBones[i]);
+            lowPolyManModel.Render(shader);
+
+            for (unsigned int i = 0; i < MAX_BONES; i++)
+                shader.Set<4, 4>(std::format("bones[{}]", i).c_str(), glm::mat4(1.0f));
+
+            // endregion MainMenuScene
+
             font
                 .SetColor(currentOption == START ? glm::vec4(1.0f) : glm::vec4(0.8f, 0.8f, 0.8f, 1.0f))
-                .Render(0, 0.5, "Start");
+                .Render(0.3f, 0.2f, "Start");
 
             font
                 .SetColor(currentOption == EXIT ? glm::vec4(1.0f) : glm::vec4(0.8f, 0.8f, 0.8f, 1.0f))
-                .Render(0, -0.5, "Exit");
+                .Render(0.3f, -0.2f, "Exit");
 
             if (keyboard.GetKeyPress(GLFW_KEY_ENTER))
             {
@@ -452,6 +523,14 @@ int main(int argc, char **argv)
                     LoadInGameEntities(shader);
                     mainGameStarted = true;
                     runnerSystem->SetEnabled(true);
+                    mainCamera = &gameCamera;
+
+                    playerAnimation = lowPolyManModel.GetAnimation(7);
+                    if (playerAnimation)
+                    {
+                        playerAnimator.PlayAnimation(playerAnimation);
+                    }
+
                     gameScene = INGAME;
                     break;
                 case EXIT:
@@ -567,6 +646,22 @@ int main(int argc, char **argv)
                 }
             }
 
+            playerAnimator.UpdateAnimation(deltaTime);
+            finalBones = playerAnimator.GetFinalBoneMatrices();
+
+            auto playerTransform = registry.GetComponent<ECS::Components::Transform>(player);
+            model = glm::translate(glm::mat4(1.0f), playerTransform.translation) * glm::mat4_cast(playerTransform.rotation) * glm::scale(glm::mat4(1.0f), playerTransform.scale);
+            model = glm::translate(model, {0.0f, -0.80f, 0.0f});
+            model = glm::rotate(model, glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+            model = glm::scale(model, glm::vec3(0.20f));
+            shader.Set<4, 4>(uniforms.model, model);
+            for (unsigned int i = 0; i < finalBones.size(); i++)
+                shader.Set<4, 4>(std::format("bones[{}]", i).c_str(), finalBones[i]);
+            lowPolyManModel.Render(shader);
+
+            for (unsigned int i = 0; i < MAX_BONES; i++)
+                shader.Set<4, 4>(std::format("bones[{}]", i).c_str(), glm::mat4(1.0f));
+
             glEnable(GL_BLEND);
             glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
@@ -574,7 +669,7 @@ int main(int argc, char **argv)
             {
                 gridShader.Use();
                 gridShader.Set<4, 4>("uVP", projection * view);
-                gridShader.Set<3>("cameraPosition", camera.GetPosition());
+                gridShader.Set<3>("cameraPosition", mainCamera->GetPosition());
                 plane.Render();
                 shader.Use();
             }
@@ -660,11 +755,22 @@ int main(int argc, char **argv)
         if (showDebugGui)
         {
             ImGui::Begin("Camera info");
-            auto camPos = camera.GetPosition();
-            auto camDir = camera.GetDirection();
+            auto camPos = mainCamera->GetPosition();
+            auto camDir = mainCamera->GetDirection();
             ImGui::Text("Position: x=%f y=%f z=%f", static_cast<double>(camPos.x), static_cast<double>(camPos.y), static_cast<double>(camPos.z));
             ImGui::Text("Direction: x=%f y=%f z=%f", static_cast<double>(camDir.x), static_cast<double>(camDir.y), static_cast<double>(camDir.z));
-            ImGui::Text("Yaw = %f | Pitch = %f", static_cast<double>(camera.GetYaw()), static_cast<double>(camera.GetPitch()));
+            ImGui::Text("Yaw = %f | Pitch = %f", static_cast<double>(mainCamera->GetYaw()), static_cast<double>(mainCamera->GetPitch()));
+            if (ImGui::Button("Switch camera"))
+            {
+                useFreeCamera = !useFreeCamera;
+                if (useFreeCamera)
+                {
+                    previousUsedCamera = mainCamera;
+                    mainCamera = &freeCamera;
+                }
+                else
+                    mainCamera = previousUsedCamera;
+            }
             ImGui::End();
 
             ImGui::Begin("Player info");
@@ -716,10 +822,10 @@ int main(int argc, char **argv)
             ImGui::Checkbox("Show polygon lines", &polygonMode);
 
             if (ImGui::DragFloat("Camera move speed", &debugSettings.cameraMoveSpeed))
-                camera.SetMoveSpeed(debugSettings.cameraMoveSpeed);
+                mainCamera->SetMoveSpeed(debugSettings.cameraMoveSpeed);
 
             if (ImGui::DragFloat("Camera turn speed", &debugSettings.cameraTurnSpeed))
-                camera.SetTurnSpeed(debugSettings.cameraTurnSpeed);
+                mainCamera->SetTurnSpeed(debugSettings.cameraTurnSpeed);
 
             ImGui::DragFloat("Road speed", &debugSettings.pathVelocity, 0.001f, 0.0f);
 
