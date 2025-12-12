@@ -7,7 +7,10 @@
 // endregion Global Include
 
 #include "Camera.h"
+#include "Components/CoinComponent.h"
 #include "Components/FloorComponent.h"
+#include "Components/ObstacleComponent.h"
+#include "Components/PathComponent.h"
 #include "Components/RunnerComponent.h"
 #include "DebugSettings.h"
 #include "ECS/Components/Collider.h"
@@ -30,6 +33,7 @@
 #include "SkinnedAnimator.h"
 #include "Skybox.h"
 #include "StorageBufferDynamicArray.h"
+#include "Systems/CoinSystem.h"
 #include "Systems/RunnerSystem.h"
 #include "Window.h"
 #include "imgui.h"
@@ -67,6 +71,7 @@ struct SingleKeyPress
 SingleKeyPress debugMode;
 SingleKeyPress menuUp;
 SingleKeyPress menuDown;
+SingleKeyPress cameraChange;
 GameScene gameScene = MAINMENU;
 uint32_t currentOption = 0;
 std::array menuOptions = {START, EXIT};
@@ -168,14 +173,14 @@ ECS::Entity floorEntity;
 ECS::Entity debugDummy;
 ECS::Entity oxxoStoreEntity;
 
+ECS::Entity lastPath;
+
 DebugSettings debugSettings;
 
 Camera *mainCamera;
 Camera *previousUsedCamera;
 
 // region Game Variables
-std::deque<ECS::Entity> pathEntities;
-std::deque<ECS::Entity> obstaclesEntities;
 float metersRunned = 0.0f;
 int pathsGenerated = 0;
 bool obstaclesCanSpawn = false;
@@ -277,8 +282,9 @@ void LoadInGameEntities(Shader &shader)
                                  .translation = {diffX, 0.0f, 0.0f},
                                  .scale = glm::vec3(0.1f)
         })
+            .AddComponent(e, PathComponent{})
             .AddComponent(e, ECS::Components::MeshRenderer{.model = &pathChunk01, .shader = &shader});
-        pathEntities.push_front(e);
+        lastPath = e;
     }
     // endregion Entities
 }
@@ -305,9 +311,13 @@ int main(int argc, char **argv)
     registry.RegisterComponent<ECS::Components::OBBCollider>();
     registry.RegisterComponent<RunnerComponent>();
     registry.RegisterComponent<FloorComponent>();
+    registry.RegisterComponent<PathComponent>();
+    registry.RegisterComponent<ObstacleComponent>();
+    registry.RegisterComponent<CoinComponent>();
     systemManager.RegisterSystem<ECS::Systems::CollisionSystem>();
     systemManager.RegisterSystem<ECS::Systems::RenderSystem>();
     systemManager.RegisterSystem<RunnerSystem>();
+    systemManager.RegisterSystem<CoinSystem>();
 
     auto runnerSystem = systemManager.GetSystem<RunnerSystem>();
     runnerSystem->SetEnabled(false);
@@ -368,6 +378,20 @@ int main(int argc, char **argv)
 
     freeCamera.SetMoveSpeed(debugSettings.cameraMoveSpeed);
     freeCamera.SetTurnSpeed(debugSettings.cameraTurnSpeed);
+
+    keyboard.AddCallback(GLFW_KEY_P, [&freeCamera]() -> void
+                         {
+                             if (cameraChange.event) return;
+                             cameraChange.event = true;
+                             useFreeCamera = !useFreeCamera;
+                             if (useFreeCamera)
+                             {
+                                 previousUsedCamera = mainCamera;
+                                 mainCamera = &freeCamera;
+                             }
+                             else
+                                 mainCamera = previousUsedCamera;
+                         });
 
     // mouse.ToggleMouse(enableCursor);
     window.SetMouseStatus(enableCursor);
@@ -591,26 +615,19 @@ int main(int argc, char **argv)
             // * ================================================================= *
             // * Path Generation                                                   *
             // * ================================================================= *
-            // 1.0 Path movement update ====================================================================================
-            std::vector<ECS::Entity> pathsToRemove;
-            for (ECS::Entity pathEntity : pathEntities)
+            // 1.1 Path movement update ====================================================================================
+            for (ECS::Entity pathEntity : registry.View<PathComponent, ECS::Components::Transform>())
             {
                 auto &transform = registry.GetComponent<ECS::Components::Transform>(pathEntity);
                 transform.translation.x = transform.translation.x - debugSettings.pathVelocity * deltaTime;
 
+                // Remove out of view paths
                 if (transform.translation.x <= -5.0f)
-                    pathsToRemove.push_back(pathEntity);
-            }
-
-            // 1.1 Remove paths out of view ================================================================================
-            for (ECS::Entity e : pathsToRemove)
-            {
-                pathEntities.pop_back();
-                registry.DestroyEntity(e);
+                    registry.DestroyEntity(pathEntity);
             }
 
             // 1.2 Create required new paths ===============================================================================
-            if (const auto &lastPathTransform = registry.GetComponent<ECS::Components::Transform>(pathEntities.front());
+            if (const auto &lastPathTransform = registry.GetComponent<ECS::Components::Transform>(lastPath);
                 lastPathTransform.translation.x <= 100.0f)
             {
                 const ECS::Entity e = registry.CreateEntity();
@@ -618,8 +635,9 @@ int main(int argc, char **argv)
                                              .translation = {lastPathTransform.translation.x + 2.0f, 0.0f, 0.0f},
                                              .scale = glm::vec3(0.1f)
                 })
+                    .AddComponent(e, PathComponent{})
                     .AddComponent(e, ECS::Components::MeshRenderer{.model = &pathChunk01, .shader = &shader});
-                pathEntities.push_front(e);
+                lastPath = e;
                 pathsGenerated = (pathsGenerated + 1) % generatorSpaceInterval;
                 obstaclesCanSpawn = true;
             }
@@ -627,28 +645,20 @@ int main(int argc, char **argv)
             // * ================================================================= *
             // * Obstacles generation                                              *
             // * ================================================================= *
-            std::vector<ECS::Entity> obstaclesToRemove;
             // 2.1 Update obstacles ================================================
-            for (const ECS::Entity obstacle : obstaclesEntities)
+            for (const ECS::Entity obstacle : registry.View<ObstacleComponent, ECS::Components::Transform>())
             {
                 auto &transform = registry.GetComponent<ECS::Components::Transform>(obstacle);
                 transform.translation.x = transform.translation.x - debugSettings.pathVelocity * deltaTime;
 
                 if (transform.translation.x <= -5.0f)
-                    obstaclesToRemove.push_back(obstacle);
+                    registry.DestroyEntity(obstacle);
             }
 
-            // 2.2 Remove obstacles out of view ====================================
-            for (const ECS::Entity obstacle : obstaclesToRemove)
-            {
-                obstaclesEntities.pop_back();
-                registry.DestroyEntity(obstacle);
-            }
-
-            // 2.3 Create new obstacles ============================================
+            // 2.2 Create new obstacles ============================================
             if (pathsGenerated == 0 && obstaclesCanSpawn)
             {
-                const auto &lastPathTransform = registry.GetComponent<ECS::Components::Transform>(pathEntities.front());
+                const auto &lastPathTransform = registry.GetComponent<ECS::Components::Transform>(lastPath);
 
                 const int genIdx = obstaclePatternGenerator(generator);
                 auto pattern = ObstaclePatterns[genIdx];
@@ -664,11 +674,46 @@ int main(int argc, char **argv)
                         .AddComponent(obstacle, ECS::Components::Transform{
                                                     .translation = {lastPathTransform.translation.x, 1.0f, obstaclePos}
                     })
+                        .AddComponent(obstacle, ObstacleComponent{})
                         .AddComponent(obstacle, ECS::Components::AABBCollider{.min = glm::vec3(-0.5f), .max = glm::vec3(0.5f)});
 
-                    obstaclesEntities.push_front(obstacle);
+                    // obstaclesEntities.push_front(obstacle);
                     obstaclesCanSpawn = false;
                 }
+            }
+
+            // * ================================================================= *
+            // * Coins generation                                                  *
+            // * ================================================================= *
+            // 3.1 Update coins ====================================================
+            for (const ECS::Entity coin : registry.View<CoinComponent, ECS::Components::Transform>())
+            {
+                auto &transform = registry.GetComponent<ECS::Components::Transform>(coin);
+                transform.translation.x = transform.translation.x - debugSettings.pathVelocity * deltaTime;
+
+                if (transform.translation.x <= -5.0f)
+                    registry.DestroyEntity(coin);
+            }
+
+            // 3.3 Create new coins ================================================
+            if (pathsGenerated == 0 && obstaclesCanSpawn)
+            {
+
+                // ! NOT WORKING, REMOVE LATER
+                // const auto &lastPathTransform = registry.GetComponent<ECS::Components::Transform>(lastPath);
+                //
+                // for (size_t i = 0; i < 3; i++)
+                // {
+                //     constexpr float laneWidth = 2.0f;
+                //     float coinPos = (static_cast<float>(i) * laneWidth) - laneWidth;
+                //     ECS::Entity coin = registry.CreateEntity();
+                //     registry
+                //         .AddComponent(coin, ECS::Components::Transform{
+                //                                 .translation = {lastPathTransform.translation.x, 1.0f, coinPos}
+                //     })
+                //         .AddComponent(coin, ECS::Components::AABBCollider{.min = glm::vec3(-0.5f), .max = glm::vec3(0.5f)})
+                //         .AddComponent(coin, CoinComponent{10});
+                // }
             }
 
             playerAnimator.UpdateAnimation(deltaTime);
@@ -762,6 +807,11 @@ int main(int argc, char **argv)
             fontBearDays.SetScale(1.2f, static_cast<float>(window.GetWidth()), static_cast<float>(window.GetHeight()))
                 .SetColor({1.0f, 0.0f, 0.0f, 0.5f})
                 .Render(-0.95f, 0.80f, std::format("DISTANCE: {:.0f}", metersRunned));
+
+            auto &playerComponent = registry.GetComponent<RunnerComponent>(player);
+            fontBearDays.SetScale(1.2f, static_cast<float>(window.GetWidth()), static_cast<float>(window.GetHeight()))
+                .SetColor({1.0f, 1.0f, 0.0f, 0.5f})
+                .Render(-0.95f, 0.70f, std::format("SCORE: {}", playerComponent.score));
             break;
         }
             // endregion Game Logic
@@ -908,6 +958,7 @@ int main(int argc, char **argv)
         if (!keyboard.GetKeyPress(GLFW_KEY_T)) enableCursorEvent = false;
         if (!keyboard.GetKeyPress(GLFW_KEY_F11)) fullscreenEvent = false;
         if (!keyboard.GetKeyPress(GLFW_KEY_F3)) debugMode.event = false;
+        if (!keyboard.GetKeyPress(GLFW_KEY_P)) cameraChange.event = false;
         // endregion
 
         window.EndGui();

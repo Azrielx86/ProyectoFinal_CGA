@@ -1,0 +1,12 @@
+//
+// Created by tohka on 12/12/25.
+//
+
+#ifndef PROYECTOFINAL_CGA_PATHCOMPONENT_H
+#define PROYECTOFINAL_CGA_PATHCOMPONENT_H
+
+struct PathComponent
+{
+};
+
+#endif // PROYECTOFINAL_CGA_PATHCOMPONENT_H

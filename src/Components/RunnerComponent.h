@@ -15,6 +15,7 @@ struct RunnerComponent
     float moveSpeed = 5.0f;
     float jumpForce = 8.0f;
     glm::vec3 velocity{0.0f};
+    int score = 0;
 };
 
 #endif // PROYECTOFINAL_CGA_RUNNERCOMPONENT_H
