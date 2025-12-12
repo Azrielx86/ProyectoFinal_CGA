@@ -79,7 +79,7 @@ bool showDebugGui = false;
 bool enableCursorEvent = true;
 bool fullscreenEvent;
 bool enableCursor = true;
-bool enableGrid = true;
+bool enableGrid = false;
 bool enableSkybox = true;
 bool enablePixelate = true;
 bool polygonMode = false;
@@ -384,8 +384,10 @@ int main(int argc, char **argv)
         .isTurnedOn = true
     });
 
-    FontType font(static_cast<float>(window.GetWidth()), static_cast<float>(window.GetHeight()), "../fonts/BearDays.ttf", 1.2f);
-    font.Init();
+    FontType fontBearDays(static_cast<float>(window.GetWidth()), static_cast<float>(window.GetHeight()), "../fonts/BearDays.ttf", 1.2f);
+    fontBearDays.Init();
+    FontType fontArial(static_cast<float>(window.GetWidth()), static_cast<float>(window.GetHeight()), "../fonts/arial.ttf", 0.30f);
+    fontArial.Init();
 
     ConfigureKeys(window);
 
@@ -478,7 +480,7 @@ int main(int argc, char **argv)
         {
             // region MainMenuScene
             // draw paths
-            for (unsigned int i = 0; i < 8; i++)
+            for (unsigned int i = 0; i < 10; i++)
             {
                 model = glm::mat4(1.0f);
                 model = glm::translate(model, {2.0f * static_cast<float>(i), 0.0f, 0.0f});
@@ -493,10 +495,25 @@ int main(int argc, char **argv)
             shader.Set<4, 4>(uniforms.model, model);
             oxxoStore.Render(shader);
 
+            // Render Ice Cream Cart
+            model = glm::translate(glm::mat4(1.0f), {5.2f, 0.65f, -1.45f});
+            model = glm::rotate(model, glm::radians(120.0f), {0, 1, 0});
+            model = glm::rotate(model, glm::radians(-90.0f), {1, 0, 0});
+            model = glm::scale(model, glm::vec3(0.8f));
+            shader.Set<4, 4>(uniforms.model, model);
+            iceCreamCart.Render(shader);
+
+            // TODO : Tsuru model
+            model = glm::translate(glm::mat4(1.0f), {8.0f, 0.10f, -1.6f});
+            model = glm::rotate(model, glm::radians(90.0f), {0, 1, 0});
+            model = glm::scale(model, glm::vec3(0.5f));
+            shader.Set<4, 4>(uniforms.model, model);
+            tsuruCar.Render(shader);
+
             playerAnimator.UpdateAnimation(deltaTime);
             finalBones = playerAnimator.GetFinalBoneMatrices();
-            model = glm::translate(glm::mat4(1.0f), {4.0f, 0.0f, 0.0f});
-            model = glm::scale(model, glm::vec3(0.20f));
+            model = glm::translate(glm::mat4(1.0f), {4.0f, 0.0f, -0.5f});
+            model = glm::scale(model, glm::vec3(0.15f));
             shader.Set<4, 4>(uniforms.model, model);
             for (unsigned int i = 0; i < finalBones.size(); i++)
                 shader.Set<4, 4>(std::format("bones[{}]", i).c_str(), finalBones[i]);
@@ -507,13 +524,21 @@ int main(int argc, char **argv)
 
             // endregion MainMenuScene
 
-            font
+            fontBearDays.SetScale(1.2f, static_cast<float>(window.GetWidth()), static_cast<float>(window.GetHeight()))
                 .SetColor(currentOption == START ? glm::vec4(1.0f) : glm::vec4(0.8f, 0.8f, 0.8f, 1.0f))
                 .Render(0.3f, 0.2f, "Start");
 
-            font
+            fontBearDays
                 .SetColor(currentOption == EXIT ? glm::vec4(1.0f) : glm::vec4(0.8f, 0.8f, 0.8f, 1.0f))
                 .Render(0.3f, -0.2f, "Exit");
+
+            fontBearDays.SetScale(1.8f, static_cast<float>(window.GetWidth()), static_cast<float>(window.GetHeight()))
+                .SetColor(glm::vec4(1.0f))
+                .Render(-0.9f, -0.7f, "City Escape");
+
+            fontBearDays.SetScale(0.60f, static_cast<float>(window.GetWidth()), static_cast<float>(window.GetHeight()))
+                .SetColor(glm::vec4(1.0f))
+                .Render(-0.9f, -0.9f, "An Advanced Computer Graphics Project");
 
             if (keyboard.GetKeyPress(GLFW_KEY_ENTER))
             {
@@ -734,7 +759,8 @@ int main(int argc, char **argv)
             }
             glDisable(GL_BLEND);
 
-            font.SetColor({1.0f, 0.0f, 0.0f, 0.5f})
+            fontBearDays.SetScale(1.2f, static_cast<float>(window.GetWidth()), static_cast<float>(window.GetHeight()))
+                .SetColor({1.0f, 0.0f, 0.0f, 0.5f})
                 .Render(-0.95f, 0.80f, std::format("DISTANCE: {:.0f}", metersRunned));
             break;
         }
@@ -748,6 +774,9 @@ int main(int argc, char **argv)
             Framebuffer::EnableMainFramebuffer();
             pixelFrameBuffer.RenderQuad();
         }
+
+        fontArial.SetColor(glm::vec4(1.0f))
+            .Render(0.75f, -0.95f, "PreAlpha 1.0.0");
 
         keyboard.HandleKeyLoop();
 
