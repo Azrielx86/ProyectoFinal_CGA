@@ -7,6 +7,7 @@
 // endregion Global Include
 
 #include "Camera.h"
+#include "Components/BuildingComponent.h"
 #include "Components/CoinComponent.h"
 #include "Components/FloorComponent.h"
 #include "Components/ObstacleComponent.h"
@@ -155,7 +156,15 @@ struct ObstacleInfo
     ECS::Components::MeshRenderer meshRenderer{};
 };
 
+struct BuildingInfo
+{
+    ECS::Components::Transform transform{};
+    ECS::Components::MeshRenderer meshRenderer{};
+    BuildingComponent buildingComponent{};
+};
+
 std::unordered_map<std::string, ObstacleInfo, string_hash> obstacleGenComponents;
+std::unordered_map<std::string, BuildingInfo, string_hash> buildingGenComponents;
 
 enum PATH_PATTERN
 {
@@ -367,6 +376,22 @@ void GenerateObstaclesInfo()
     };
 }
 
+void GenerateBuildingsInfo()
+{
+    buildingGenComponents["oxxo"] = {
+        .transform = {
+            .scale = glm::vec3(0.30f)
+        },
+        .meshRenderer = {
+            .model = &oxxoStore,
+            .shader = &shader
+        },
+        .buildingComponent = {
+            .border = {1.0f, 1.0f, 1.0f}
+        }
+    };
+}
+
 int main(int argc, char **argv)
 {
     Window window(1280, 720, "Proyecto Final CGA");
@@ -388,6 +413,7 @@ int main(int argc, char **argv)
     registry.RegisterComponent<FloorComponent>();
     registry.RegisterComponent<PathComponent>();
     registry.RegisterComponent<ObstacleComponent>();
+    registry.RegisterComponent<BuildingComponent>();
     registry.RegisterComponent<CoinComponent>();
     systemManager.RegisterSystem<ECS::Systems::CollisionSystem>();
     systemManager.RegisterSystem<ECS::Systems::RenderSystem>();

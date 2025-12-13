@@ -45,6 +45,7 @@ add_executable(ProyectoFinal_CGA src/main.cpp
         src/Components/CoinComponent.h
         src/Components/PathComponent.h
         src/Components/ObstacleComponent.h
+        src/Components/BuildingComponent.h
 )
 
 if (NOT USE_DEBUG_ASSETS)
