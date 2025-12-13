@@ -121,6 +121,11 @@ Model iceCreamCart(
     "."
 #endif
     "./assets/models/IceCreamCart/IceCreamCart.fbx");
+Model microbus(
+#if defined(DEBUG) || defined(USE_DEBUG_ASSETS)
+    "."
+#endif
+    "./assets/models/Microbus/Microbus.obj");
 
 Model lowPolyManModel(
 #if defined(DEBUG) || defined(USE_DEBUG_ASSETS)
@@ -142,6 +147,15 @@ struct Uniforms
 {
     GLint model = 0;
 };
+
+struct ObstacleInfo
+{
+    ECS::Components::Transform transform{};
+    ECS::Components::AABBCollider collider{};
+    ECS::Components::MeshRenderer meshRenderer{};
+};
+
+std::unordered_map<std::string, ObstacleInfo, string_hash> obstacleGenComponents;
 
 enum PATH_PATTERN
 {
@@ -173,8 +187,6 @@ ECS::SystemManager systemManager;
 
 ECS::Entity player;
 ECS::Entity floorEntity;
-ECS::Entity debugDummy;
-ECS::Entity oxxoStoreEntity;
 
 ECS::Entity lastPath;
 
@@ -182,6 +194,14 @@ DebugSettings debugSettings;
 
 Camera *mainCamera;
 Camera *previousUsedCamera;
+
+Shader shader;
+Shader skyboxShader;
+Shader gridShader;
+Shader fbPixelShader;
+Shader debugShader;
+Shader depthShader;
+Shader pointDepthShader;
 
 // region Game Variables
 float metersRunned = 0.0f;
@@ -255,22 +275,14 @@ void LoadInGameEntities(Shader &shader)
         .AddComponent(floorEntity, ECS::Components::AABBCollider{.min = {-10.0f, -0.5f, -25.31f}, .max = {10.0f, 0.5f, 25.31f}})
         .AddComponent(floorEntity, FloorComponent{});
 
-    debugDummy = registry.CreateEntity();
-    registry.AddComponent(debugDummy, ECS::Components::Transform{
-                                          .translation = {0.0f, 2.0f, 0.0f}
-    })
-        .AddComponent(debugDummy, ECS::Components::AABBCollider{.min = {-0.5f, -1.0f, -0.5f}, .max = {0.5f, 1.0f, 0.5f}});
-    // !Only enable when is required
-    registry.DestroyEntity(debugDummy);
-
-    oxxoStoreEntity = registry.CreateEntity();
+    const ECS::Entity oxxoStoreEntity = registry.CreateEntity();
     registry.AddComponent(oxxoStoreEntity, ECS::Components::Transform{
                                                .translation = {5.0f, 0.0f, -8.5f},
                                                .scale = glm::vec3(0.25f)
     })
         .AddComponent(oxxoStoreEntity, ECS::Components::MeshRenderer{.model = &oxxoStore, .shader = &shader});
 
-    const auto tsuruEntity = registry.CreateEntity();
+    const ECS::Entity tsuruEntity = registry.CreateEntity();
     registry.AddComponent(tsuruEntity, ECS::Components::Transform{
                                            .translation = {15.0f, 0.0f, -8.0f}
     })
@@ -320,7 +332,7 @@ void renderScene(Shader &shader)
     shader.Set<4, 4>("model", model);
     iceCreamCart.Render(shader);
 
-    // TODO : Tsuru model
+    // Tsuru model
     model = glm::translate(glm::mat4(1.0f), {8.0f, 0.10f, -1.6f});
     model = glm::rotate(model, glm::radians(90.0f), {0, 1, 0});
     model = glm::scale(model, glm::vec3(0.5f));
@@ -337,6 +349,26 @@ void renderScene(Shader &shader)
 
     for (unsigned int i = 0; i < MAX_BONES; i++)
         shader.Set<4, 4>(std::format("bones[{}]", i).c_str(), glm::mat4(1.0f));
+}
+
+void GenerateObstaclesInfo()
+{
+    obstacleGenComponents["bus"] = {
+        .transform = ECS::Components::Transform{
+                                                .rotation = glm::quat_cast(glm::rotate(glm::mat4(1.0f), glm::radians(180.0f), {0, 1, 0})),
+                                                .scale = glm::vec3(0.7f)},
+        .collider = ECS::Components::AABBCollider{.min = {-3.01, 0, -0.96}, .max = {3.01, 2.68, 0.96}},
+        .meshRenderer = ECS::Components::MeshRenderer{.model = &microbus, .shader = &shader}
+    };
+
+    obstacleGenComponents["iceCreamCart"] = {
+        .transform = ECS::Components::Transform{
+                                                .translation = {0.0f, 0.65f, 0.0f},
+                                                .rotation = glm::quat_cast(glm::rotate(glm::mat4(1.0f), glm::radians(-90.0f), {1, 0, 0})),
+                                                .scale = glm::vec3(0.8f)},
+        .collider = ECS::Components::AABBCollider{.min = glm::vec3(-0.8f), .max = glm::vec3(0.8f)},
+        .meshRenderer = ECS::Components::MeshRenderer{.model = &iceCreamCart, .shader = &shader}
+    };
 }
 
 int main(int argc, char **argv)
@@ -376,6 +408,7 @@ int main(int argc, char **argv)
     pathChunk01.Load();
     tsuruCar.Load();
     iceCreamCart.Load();
+    microbus.Load();
     lowPolyManModel.Load();
 
     playerAnimation = lowPolyManModel.GetAnimation(2);
@@ -383,6 +416,8 @@ int main(int argc, char **argv)
     {
         playerAnimator.PlayAnimation(playerAnimation);
     }
+
+    GenerateObstaclesInfo();
 
     // clang-format off
 	Skybox skybox({
@@ -396,13 +431,13 @@ int main(int argc, char **argv)
     // clang-format on
     skybox.Load();
 
-    Shader shader = *resources.GetShader("base");
-    Shader skyboxShader = *resources.GetShader("skybox_shader");
-    Shader gridShader = *resources.GetShader("infinite_grid");
-    Shader fbPixelShader = *resources.GetShader("fb_pixel");
-    Shader debugShader = *resources.GetShader("debug");
-    Shader depthShader = *resources.GetShader("depth_shader");
-    Shader pointDepthShader = *resources.GetShader("point_depth_shader");
+    shader = *resources.GetShader("base");
+    skyboxShader = *resources.GetShader("skybox_shader");
+    gridShader = *resources.GetShader("infinite_grid");
+    fbPixelShader = *resources.GetShader("fb_pixel");
+    debugShader = *resources.GetShader("debug");
+    depthShader = *resources.GetShader("depth_shader");
+    pointDepthShader = *resources.GetShader("point_depth_shader");
 
     Framebuffer pixelFrameBuffer(fbPixelShader, window.GetWidth(), window.GetHeight());
     pixelFrameBuffer.SetMaxResolution(WIDTH, pixelFbResolution);
@@ -453,7 +488,37 @@ int main(int argc, char **argv)
 
     StorageBufferDynamicArray<Lights::PointLight> pointLights(3);
     pointLights.Add({
-        .position = {2.0f, 2.0f, 2.0f, 0.0f},
+        .position = {0.0f, 3.0f, 0.0f, 0.0f},
+        .ambient = {0.1f, 0.1f, 0.1f, 0.0f},
+        .diffuse = {0.9f, 0.7f, 0.7f, 0.0f},
+        .specular = {1.0f, 1.0f, 1.0f, 0.0f},
+        .constant = 1.0f,
+        .linear = 0.09f,
+        .quadratic = 0.032f,
+        .isTurnedOn = true
+    });
+    pointLights.Add({
+        .position = {10.0f, 3.0f, 0.0f, 0.0f},
+        .ambient = {0.1f,  0.1f, 0.1f, 0.0f},
+        .diffuse = {0.9f,  0.7f, 0.7f, 0.0f},
+        .specular = {1.0f,  1.0f, 1.0f, 0.0f},
+        .constant = 1.0f,
+        .linear = 0.09f,
+        .quadratic = 0.032f,
+        .isTurnedOn = true
+    });
+    pointLights.Add({
+        .position = {20.0f, 3.0f, 0.0f, 0.0f},
+        .ambient = {0.1f,  0.1f, 0.1f, 0.0f},
+        .diffuse = {0.9f,  0.7f, 0.7f, 0.0f},
+        .specular = {1.0f,  1.0f, 1.0f, 0.0f},
+        .constant = 1.0f,
+        .linear = 0.09f,
+        .quadratic = 0.032f,
+        .isTurnedOn = true
+    });
+    pointLights.Add({
+        .position = {30.0f, 3.0f, 0.0f, 0.0f},
         .ambient = {0.1f, 0.1f, 0.1f, 0.0f},
         .diffuse = {0.9f, 0.7f, 0.7f, 0.0f},
         .specular = {1.0f, 1.0f, 1.0f, 0.0f},
@@ -754,12 +819,28 @@ int main(int argc, char **argv)
                     constexpr float laneWidth = 2.0f;
                     const float obstaclePos = (static_cast<float>(i) * laneWidth) - laneWidth;
                     ECS::Entity obstacle = registry.CreateEntity();
-                    registry
-                        .AddComponent(obstacle, ECS::Components::Transform{
-                                                    .translation = {lastPathTransform.translation.x, 1.0f, obstaclePos}
+
+                    std::uniform_int_distribution<unsigned long> obstacleTypeGenerator(0, obstacleGenComponents.size() - 1);
+                    auto it = obstacleGenComponents.begin();
+                    std::advance(it, obstacleTypeGenerator(generator));
+                    // ReSharper disable once CppUseStructuredBinding
+                    ObstacleInfo randomObstacle = it->second;
+
+                    registry.AddComponent(obstacle, ECS::Components::Transform{
+                                                        .translation = {lastPathTransform.translation.x, randomObstacle.transform.translation.y, obstaclePos},
+                                                        .rotation = randomObstacle.transform.rotation,
+                                                        .scale = randomObstacle.transform.scale
                     })
-                        .AddComponent(obstacle, ObstacleComponent{})
-                        .AddComponent(obstacle, ECS::Components::AABBCollider{.min = glm::vec3(-0.5f), .max = glm::vec3(0.5f)});
+                        .AddComponent(obstacle, ECS::Components::AABBCollider{.min = randomObstacle.collider.min, .max = randomObstacle.collider.max})
+                        .AddComponent(obstacle, randomObstacle.meshRenderer)
+                        .AddComponent(obstacle, ObstacleComponent{});
+
+                    // registry
+                    //     .AddComponent(obstacle, ECS::Components::Transform{
+                    //                                 .translation = {lastPathTransform.translation.x, 1.0f, obstaclePos}
+                    // })
+                    //     .AddComponent(obstacle, ObstacleComponent{})
+                    //     .AddComponent(obstacle, ECS::Components::AABBCollider{.min = glm::vec3(-0.5f), .max = glm::vec3(0.5f)});
                 }
 
                 // 2.4 Create new coins ================================================================================
