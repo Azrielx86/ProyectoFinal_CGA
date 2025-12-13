@@ -1,0 +1,33 @@
+# Blender 4.4.3 MTL File: 'xd.blend'
+# www.blender.org
+
+newmtl ALU
+Ns 180.000000
+Ka 1.000000 1.000000 1.000000
+Ks 1.000000 1.000000 1.000000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+d 1.000000
+illum 3
+map_Kd MINISTRY_OF_FINANCE.jpg
+
+newmtl Material.013
+Ns 324.000031
+Ka 1.000000 1.000000 1.000000
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.000000
+d 1.000000
+illum 2
+map_Kd MINISTRY_OF_FINANCE.jpg
+
+newmtl asphalt_cracked
+Ka 1.000000 1.000000 1.000000
+Ks 0.500000 0.500000 0.500000
+Ke 0.000000 0.000000 0.000000
+Ni 1.450000
+d 1.000000
+illum 2
+map_Kd -s 10 10 2 asphalt_cracked_albedo.jpg
+map_Ns -s 10 10 2 asphalt_cracked_roughness.jpg
+map_Bump -s 10 10 2 asphalt_cracked_normal.jpg

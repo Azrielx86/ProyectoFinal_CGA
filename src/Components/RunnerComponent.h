@@ -17,6 +17,7 @@ struct RunnerComponent
     glm::vec3 velocity{0.0f};
     int score = 0;
     int obstacleHits = 0;
+    int nextExtraLife = 1000;
 };
 
 #endif // PROYECTOFINAL_CGA_RUNNERCOMPONENT_H

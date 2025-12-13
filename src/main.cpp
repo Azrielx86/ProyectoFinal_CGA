@@ -137,12 +137,11 @@ Model coinModel(
     "."
 #endif
     "./assets/models/Coin/Coin.obj");
-// Model buildingModel(
-// #if defined(DEBUG) || defined(USE_DEBUG_ASSETS)
-// "."
-// #endif
-// "./assets/models/Store/Store.obj"
-//     );
+Model buildingModel(
+#if defined(DEBUG) || defined(USE_DEBUG_ASSETS)
+    "."
+#endif
+    "./assets/models/LowPolyBuilding/otherbuilding.obj");
 
 Model lowPolyManModel(
 #if defined(DEBUG) || defined(USE_DEBUG_ASSETS)
@@ -234,6 +233,12 @@ int pathsGenerated = 0;
 bool obstaclesCanSpawn = false;
 constexpr int generatorSpaceInterval = 6;
 constexpr int maxLives = 3;
+
+// Building generation
+float lastBuildingXLeft = 20.0f;
+float lastBuildingXRight = 20.0f;
+constexpr float buildingSeparation = 30.0f; // min distance between buildings
+constexpr float buildingSideOffset = 8.0f;
 
 // endregion Game Variables
 
@@ -404,7 +409,13 @@ void GenerateBuildingsInfo()
     buildingGenComponents["store"] = {
         .transform = {
                       .scale = glm::vec3(1.0f)},
-        .meshRenderer = {.model = &oxxoStore, .shader = &shader},
+        .meshRenderer = {.model = &storeModel, .shader = &shader},
+        .buildingComponent = {.border = {1.0f, 1.0f, 1.0f}}
+    };
+    buildingGenComponents["lpbuild"] = {
+        .transform = {
+                      .scale = glm::vec3(1.0f)},
+        .meshRenderer = {.model = &buildingModel, .shader = &shader},
         .buildingComponent = {.border = {1.0f, 1.0f, 1.0f}}
     };
 }
@@ -450,6 +461,8 @@ int main(int argc, char **argv)
     microbus.Load();
     lowPolyManModel.Load();
     coinModel.Load();
+    storeModel.Load();
+    buildingModel.Load();
 
     playerAnimation = lowPolyManModel.GetAnimation(2);
     if (playerAnimation)
@@ -458,6 +471,7 @@ int main(int argc, char **argv)
     }
 
     GenerateObstaclesInfo();
+    GenerateBuildingsInfo();
 
     // clang-format off
 	Skybox skybox({
@@ -849,6 +863,19 @@ int main(int argc, char **argv)
                     registry.DestroyEntity(coin);
             }
 
+            // 2.2.1 Update buildings ================================================================================
+            for (const ECS::Entity building : registry.View<BuildingComponent, ECS::Components::Transform>())
+            {
+                auto &transform = registry.GetComponent<ECS::Components::Transform>(building);
+                transform.translation.x = transform.translation.x - debugSettings.pathVelocity * deltaTime;
+
+                if (transform.translation.x <= -25.0f)
+                    registry.DestroyEntity(building);
+            }
+
+            lastBuildingXLeft -= debugSettings.pathVelocity * deltaTime;
+            lastBuildingXRight -= debugSettings.pathVelocity * deltaTime;
+
             // 2.3 Create new obstacles and coins ======================================================================
             if (pathsGenerated == 0 && obstaclesCanSpawn)
             {
@@ -908,6 +935,54 @@ int main(int argc, char **argv)
                             .AddComponent(coin, ECS::Components::AABBCollider{.min = glm::vec3(-0.25f), .max = glm::vec3(0.25f)})
                             .AddComponent(coin, CoinComponent{5});
                     }
+                }
+
+                // 2.5 Building generation ================================================================================
+                const float generationPointX = lastPathTransform.translation.x;
+
+                std::uniform_int_distribution<int> spawnChance(0, 1); // 1 in 2 chance to spawn
+                std::uniform_int_distribution<size_t> buildingTypeGenerator(0, buildingGenComponents.size() - 1);
+
+                // Left side
+                if (generationPointX > lastBuildingXLeft && spawnChance(generator) == 0)
+                {
+                    auto it = buildingGenComponents.begin();
+                    std::advance(it, buildingTypeGenerator(generator));
+                    const BuildingInfo randomBuilding = it->second;
+
+                    ECS::Entity building = registry.CreateEntity();
+
+                    const glm::quat rotation = glm::quat_cast(glm::rotate(glm::mat4(1.0f), glm::radians(180.0f), {0, 1, 0}));
+
+                    registry.AddComponent(building, ECS::Components::Transform{
+                                                        .translation = {generationPointX, 0.0f, buildingSideOffset},
+                                                        .rotation = rotation,
+                                                        .scale = randomBuilding.transform.scale
+                    })
+                        .AddComponent(building, randomBuilding.meshRenderer)
+                        .AddComponent(building, BuildingComponent{});
+
+                    lastBuildingXLeft = generationPointX + buildingSeparation;
+                }
+
+                // Right side
+                if (generationPointX > lastBuildingXRight && spawnChance(generator) == 0)
+                {
+                    auto it = buildingGenComponents.begin();
+                    std::advance(it, buildingTypeGenerator(generator));
+                    const BuildingInfo randomBuilding = it->second;
+
+                    ECS::Entity building = registry.CreateEntity();
+
+                    registry.AddComponent(building, ECS::Components::Transform{
+                                                        .translation = {generationPointX, 0.0f, -buildingSideOffset},
+                                                        .rotation = randomBuilding.transform.rotation,
+                                                        .scale = randomBuilding.transform.scale
+                    })
+                        .AddComponent(building, randomBuilding.meshRenderer)
+                        .AddComponent(building, BuildingComponent{});
+
+                    lastBuildingXRight = generationPointX + buildingSeparation;
                 }
 
                 obstaclesCanSpawn = false;
@@ -1065,6 +1140,7 @@ int main(int argc, char **argv)
             {
                 gameScene = MAINMENU;
                 mainCamera = &menuCamera;
+                registry.Reset();
                 playerAnimation = lowPolyManModel.GetAnimation(2);
                 if (playerAnimation)
                 {
