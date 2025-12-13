@@ -5,7 +5,7 @@
 
 struct DebugSettings
 {
-    float pathVelocity = 25.0f;
+    float pathVelocity = 28.0f;
     float cameraMoveSpeed = 5.0f;
     float cameraTurnSpeed = 75.0f;
     bool enablePixelate = true;

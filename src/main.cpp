@@ -169,7 +169,7 @@ constexpr std::array ObstaclePatterns = {
     std::array{CLEAN,    OBSTACLE, CLEAN   },
     std::array{CLEAN,    CLEAN,    OBSTACLE},
     std::array{OBSTACLE, OBSTACLE, CLEAN   },
-    std::array{OBSTACLE, OBSTACLE, OBSTACLE},
+    // std::array{OBSTACLE, OBSTACLE, OBSTACLE},
     std::array{OBSTACLE, CLEAN,    OBSTACLE},
 };
 
@@ -207,7 +207,7 @@ Shader pointDepthShader;
 float metersRunned = 0.0f;
 int pathsGenerated = 0;
 bool obstaclesCanSpawn = false;
-constexpr int generatorSpaceInterval = 8;
+constexpr int generatorSpaceInterval = 6;
 
 // endregion Game Variables
 
@@ -255,7 +255,7 @@ void SaveSettings()
     }
 }
 
-void LoadInGameEntities(Shader &shader)
+void LoadInGameEntities()
 {
     // region Entities
     player = registry.CreateEntity();
@@ -264,7 +264,7 @@ void LoadInGameEntities(Shader &shader)
                                   .translation = {0.0f, 2.0f, 0.0f}
     })
         .AddComponent(player, RunnerComponent{})
-        .AddComponent(player, ECS::Components::AABBCollider{.min = {-0.3f, -1.0f, -0.3f}, .max = {0.3f, 1.0f, 0.3f}});
+        .AddComponent(player, ECS::Components::AABBCollider{.min = {-0.25f, -0.7f, -0.25f}, .max = {0.25f, 0.7f, 0.25f}});
 
     floorEntity = registry.CreateEntity();
     registry
@@ -274,19 +274,6 @@ void LoadInGameEntities(Shader &shader)
     })
         .AddComponent(floorEntity, ECS::Components::AABBCollider{.min = {-10.0f, -0.5f, -25.31f}, .max = {10.0f, 0.5f, 25.31f}})
         .AddComponent(floorEntity, FloorComponent{});
-
-    const ECS::Entity oxxoStoreEntity = registry.CreateEntity();
-    registry.AddComponent(oxxoStoreEntity, ECS::Components::Transform{
-                                               .translation = {5.0f, 0.0f, -8.5f},
-                                               .scale = glm::vec3(0.25f)
-    })
-        .AddComponent(oxxoStoreEntity, ECS::Components::MeshRenderer{.model = &oxxoStore, .shader = &shader});
-
-    const ECS::Entity tsuruEntity = registry.CreateEntity();
-    registry.AddComponent(tsuruEntity, ECS::Components::Transform{
-                                           .translation = {15.0f, 0.0f, -8.0f}
-    })
-        .AddComponent(tsuruEntity, ECS::Components::MeshRenderer{.model = &tsuruCar, .shader = &shader});
 
     for (int i = 0; i < 2; i++)
     {
@@ -304,7 +291,7 @@ void LoadInGameEntities(Shader &shader)
     // endregion Entities
 }
 
-void renderScene(Shader &shader)
+void renderScene(Shader &shd)
 {
     glm::mat4 model;
     // region MainMenuScene
@@ -314,41 +301,41 @@ void renderScene(Shader &shader)
         model = glm::mat4(1.0f);
         model = glm::translate(model, {2.0f * static_cast<float>(i), 0.0f, 0.0f});
         model = glm::scale(model, glm::vec3(0.1f));
-        shader.Set<4, 4>("model", model);
-        pathChunk01.Render(shader);
+        shd.Set<4, 4>("model", model);
+        pathChunk01.Render(shd);
     }
 
     // Render OXXO
     model = glm::translate(glm::mat4(1.0f), {5.0f, 0.0f, -9.0f});
     model = glm::scale(model, glm::vec3(0.30f));
-    shader.Set<4, 4>("model", model);
-    oxxoStore.Render(shader);
+    shd.Set<4, 4>("model", model);
+    oxxoStore.Render(shd);
 
     // Render Ice Cream Cart
     model = glm::translate(glm::mat4(1.0f), {5.2f, 0.65f, -1.45f});
     model = glm::rotate(model, glm::radians(120.0f), {0, 1, 0});
     model = glm::rotate(model, glm::radians(-90.0f), {1, 0, 0});
     model = glm::scale(model, glm::vec3(0.8f));
-    shader.Set<4, 4>("model", model);
-    iceCreamCart.Render(shader);
+    shd.Set<4, 4>("model", model);
+    iceCreamCart.Render(shd);
 
     // Tsuru model
     model = glm::translate(glm::mat4(1.0f), {8.0f, 0.10f, -1.6f});
     model = glm::rotate(model, glm::radians(90.0f), {0, 1, 0});
     model = glm::scale(model, glm::vec3(0.5f));
-    shader.Set<4, 4>("model", model);
-    tsuruCar.Render(shader);
+    shd.Set<4, 4>("model", model);
+    tsuruCar.Render(shd);
 
     auto finalBones = playerAnimator.GetFinalBoneMatrices();
     model = glm::translate(glm::mat4(1.0f), {4.0f, 0.0f, -0.5f});
     model = glm::scale(model, glm::vec3(0.15f));
-    shader.Set<4, 4>("model", model);
+    shd.Set<4, 4>("model", model);
     for (unsigned int i = 0; i < finalBones.size(); i++)
-        shader.Set<4, 4>(std::format("bones[{}]", i).c_str(), finalBones[i]);
-    lowPolyManModel.Render(shader);
+        shd.Set<4, 4>(std::format("bones[{}]", i).c_str(), finalBones[i]);
+    lowPolyManModel.Render(shd);
 
     for (unsigned int i = 0; i < MAX_BONES; i++)
-        shader.Set<4, 4>(std::format("bones[{}]", i).c_str(), glm::mat4(1.0f));
+        shd.Set<4, 4>(std::format("bones[{}]", i).c_str(), glm::mat4(1.0f));
 }
 
 void GenerateObstaclesInfo()
@@ -368,6 +355,15 @@ void GenerateObstaclesInfo()
                                                 .scale = glm::vec3(0.8f)},
         .collider = ECS::Components::AABBCollider{.min = glm::vec3(-0.8f), .max = glm::vec3(0.8f)},
         .meshRenderer = ECS::Components::MeshRenderer{.model = &iceCreamCart, .shader = &shader}
+    };
+
+    obstacleGenComponents["tsuru"] = {
+        .transform = ECS::Components::Transform{
+                                                .translation = {0.0f, 0.0f, 0.0f},
+                                                .rotation = glm::quat_cast(glm::rotate(glm::mat4(1.0f), glm::radians(-90.0f), {0, 1, 0})),
+                                                .scale = glm::vec3(0.5f)},
+        .collider = ECS::Components::AABBCollider{.min = {-3.3f, 0.0f, -1.0f}, .max = {2.3f, 1.0f, 1.0f}},
+        .meshRenderer = ECS::Components::MeshRenderer{.model = &tsuruCar, .shader = &shader}
     };
 }
 
@@ -519,9 +515,9 @@ int main(int argc, char **argv)
     });
     pointLights.Add({
         .position = {30.0f, 3.0f, 0.0f, 0.0f},
-        .ambient = {0.1f, 0.1f, 0.1f, 0.0f},
-        .diffuse = {0.9f, 0.7f, 0.7f, 0.0f},
-        .specular = {1.0f, 1.0f, 1.0f, 0.0f},
+        .ambient = {0.1f,  0.1f, 0.1f, 0.0f},
+        .diffuse = {0.9f,  0.7f, 0.7f, 0.0f},
+        .specular = {1.0f,  1.0f, 1.0f, 0.0f},
         .constant = 1.0f,
         .linear = 0.09f,
         .quadratic = 0.032f,
@@ -702,7 +698,7 @@ int main(int argc, char **argv)
                 {
                 case START:
                     registry.Reset();
-                    LoadInGameEntities(shader);
+                    LoadInGameEntities();
                     mainGameStarted = true;
                     runnerSystem->SetEnabled(true);
                     mainCamera = &gameCamera;
@@ -1000,7 +996,7 @@ int main(int argc, char **argv)
             model = glm::translate(glm::mat4(1.0f), playerTransform.translation) * glm::mat4_cast(playerTransform.rotation) * glm::scale(glm::mat4(1.0f), playerTransform.scale);
             model = glm::translate(model, {0.0f, -0.80f, 0.0f});
             model = glm::rotate(model, glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f));
-            model = glm::scale(model, glm::vec3(0.20f));
+            model = glm::scale(model, glm::vec3(0.150f));
             shader.Set<4, 4>(uniforms.model, model);
             for (unsigned int i = 0; i < finalBones.size(); i++)
                 shader.Set<4, 4>(std::format("bones[{}]", i).c_str(), finalBones[i]);
