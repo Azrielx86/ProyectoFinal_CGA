@@ -27,7 +27,9 @@
 #include "ECS/Systems/CollisionSystem.h"
 #include "ECS/Systems/RenderSystem.h"
 #include "FontType.h"
+#include "Input/Joystick.h"
 #include "Input/Keyboard.h"
+#include "Input/Mouse.h"
 #include "Lights/DirectionalLight.h"
 #include "Lights/PointLight.h"
 #include "Model.h"
@@ -158,6 +160,7 @@ SkinnedAnimator playerAnimator;
 
 Input::Keyboard &keyboard = *Input::Keyboard::GetInstance();
 Input::Mouse &mouse = *Input::Mouse::GetInstance();
+Input::Joystick &joystick = *Input::Joystick::GetInstance();
 Resources::ResourceManager &resources = *Resources::ResourceManager::GetInstance();
 
 GLuint particleVAO;
@@ -539,7 +542,7 @@ int main()
     mainCamera = &menuCamera;
     previousUsedCamera = &menuCamera;
 
-    freeCamera.SetInput(Input::Keyboard::GetInstance(), Input::Mouse::GetInstance());
+    freeCamera.SetInput(Input::Keyboard::GetInstance(), Input::Mouse::GetInstance(), Input::Joystick::GetInstance());
     gameCamera.SetInput(Input::Keyboard::GetInstance(), Input::Mouse::GetInstance());
 
     freeCamera.SetMoveSpeed(debugSettings.cameraMoveSpeed);
@@ -643,6 +646,8 @@ int main()
         auto now = static_cast<float>(glfwGetTime());
         deltaTime = now - lastTime;
         lastTime = now;
+
+        joystick.Update();
 
         if (fpsCounter <= 1)
         {
@@ -782,7 +787,7 @@ int main()
                 .SetColor(glm::vec4(1.0f))
                 .Render(-0.9f, -0.9f, "An Advanced Computer Graphics Project");
 
-            if (keyboard.GetKeyPress(GLFW_KEY_ENTER))
+            if (keyboard.GetKeyPress(GLFW_KEY_ENTER) || joystick.GetButtonPress(GLFW_GAMEPAD_BUTTON_A))
             {
                 switch (menuOptions[currentOption])
                 {
@@ -807,19 +812,19 @@ int main()
                 }
             }
 
-            if (!menuUp.event && keyboard.GetKeyPress(GLFW_KEY_UP))
+            if (!menuUp.event && (keyboard.GetKeyPress(GLFW_KEY_UP) || joystick.GetButtonPress(GLFW_GAMEPAD_BUTTON_DPAD_UP)))
                 menuUp.event = true;
 
-            if (!menuDown.event && keyboard.GetKeyPress(GLFW_KEY_DOWN))
+            if (!menuDown.event && (keyboard.GetKeyPress(GLFW_KEY_DOWN) || joystick.GetButtonPress(GLFW_GAMEPAD_BUTTON_DPAD_DOWN)))
                 menuDown.event = true;
 
-            if (menuUp.event && !keyboard.GetKeyPress(GLFW_KEY_UP))
+            if (menuUp.event && (!keyboard.GetKeyPress(GLFW_KEY_UP) && !joystick.GetButtonPress(GLFW_GAMEPAD_BUTTON_DPAD_UP)))
             {
                 currentOption = (currentOption == 0) ? menuOptions.size() - 1 : currentOption - 1;
                 menuUp.event = false;
             }
 
-            if (menuDown.event && !keyboard.GetKeyPress(GLFW_KEY_DOWN))
+            if (menuDown.event && (!keyboard.GetKeyPress(GLFW_KEY_DOWN) && !joystick.GetButtonPress(GLFW_GAMEPAD_BUTTON_DPAD_DOWN)))
             {
                 currentOption = (currentOption == menuOptions.size() - 1) ? 0 : currentOption + 1;
                 menuDown.event = false;
@@ -1166,7 +1171,7 @@ int main()
                 .SetColor(glm::vec4(1.0f, 0.0f, 0.0f, 1.0f))
                 .Render(-0.3f, -0.15f, "Press 'C' to return");
 
-            if (keyboard.GetKeyPress(GLFW_KEY_C))
+            if (keyboard.GetKeyPress(GLFW_KEY_C) || joystick.GetButtonPress(GLFW_GAMEPAD_BUTTON_A))
             {
                 gameScene = MAINMENU;
                 mainCamera = &menuCamera;

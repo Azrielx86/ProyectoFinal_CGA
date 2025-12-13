@@ -1,11 +1,11 @@
 
-
 #include "RunnerSystem.h"
 
 #include "../Components/FloorComponent.h"
 #include "../Components/RunnerComponent.h"
 #include "ECS/Components/Collider.h"
 #include "ECS/Components/Transform.h"
+#include "Input/Joystick.h"
 #include "Input/Keyboard.h"
 
 #include <GLFW/glfw3.h>
@@ -14,6 +14,7 @@ void RunnerSystem::Update(ECS::Registry &registry, float deltaTime)
 {
     if (!enabled) return;
     const auto kb = Input::Keyboard::GetInstance();
+    const auto joystick = Input::Joystick::GetInstance();
     const std::vector<ECS::Entity> entities = registry.View<RunnerComponent, ECS::Components::Transform>();
 
     if (entities.empty())
@@ -53,14 +54,14 @@ void RunnerSystem::Update(ECS::Registry &registry, float deltaTime)
     if (runner.grounded)
     {
         runner.velocity.y = 0;
-        if (kb->GetKeyPress(GLFW_KEY_SPACE))
+        if (kb->GetKeyPress(GLFW_KEY_SPACE) || joystick->GetButtonPress(GLFW_GAMEPAD_BUTTON_A))
             runner.velocity.y = runner.jumpForce;
     }
     else
     {
         runner.velocity.y += gravity * runner.weight * deltaTime;
 
-        if (!downTriggered && kb->GetKeyPress(GLFW_KEY_DOWN))
+        if (!downTriggered && (kb->GetKeyPress(GLFW_KEY_DOWN) || joystick->GetButtonPress(GLFW_GAMEPAD_BUTTON_DPAD_DOWN)))
         {
             runner.velocity.y += -5.0f;
             downTriggered = true;
@@ -73,14 +74,14 @@ void RunnerSystem::Update(ECS::Registry &registry, float deltaTime)
     if (transform.translation.y < 0.0f)
         transform.translation.y = 1.0f;
 
-    const bool leftDown = kb->GetKeyPress(GLFW_KEY_LEFT);
+    const bool leftDown = kb->GetKeyPress(GLFW_KEY_LEFT) || joystick->GetButtonPress(GLFW_GAMEPAD_BUTTON_DPAD_LEFT);
     if (leftDown && !leftPressed)
     {
         targetLane--;
     }
     leftPressed = leftDown;
 
-    const bool rightDown = kb->GetKeyPress(GLFW_KEY_RIGHT);
+    const bool rightDown = kb->GetKeyPress(GLFW_KEY_RIGHT) || joystick->GetButtonPress(GLFW_GAMEPAD_BUTTON_DPAD_RIGHT);
     if (rightDown && !rightPressed)
     {
         targetLane++;

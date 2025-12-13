@@ -7,6 +7,12 @@
 
 #include "ECS/ISystem.h"
 
+namespace Input
+{
+class Keyboard;
+class Joystick;
+} // namespace Input
+
 constexpr float gravity = -9.81f;
 
 class RunnerSystem final : public ECS::ISystem

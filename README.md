@@ -79,6 +79,8 @@ cmake --build .
 
 ![GameOver](./docs/gameover.png)]
 
+![Debug](./docs/debug.png)
+
 ## Créditos de los modelos 3D utilizados
 
 * [Bearded man - Low poly animated](https://skfb.ly/oqBtx)
