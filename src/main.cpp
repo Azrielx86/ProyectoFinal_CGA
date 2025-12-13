@@ -613,7 +613,6 @@ int main(int argc, char **argv)
         {
         case MAINMENU:
         {
-
             renderScene(shader);
 
             fontBearDays.SetScale(1.2f, static_cast<float>(window.GetWidth()), static_cast<float>(window.GetHeight()))
@@ -637,6 +636,7 @@ int main(int argc, char **argv)
                 switch (menuOptions[currentOption])
                 {
                 case START:
+                    registry.Reset();
                     LoadInGameEntities(shader);
                     mainGameStarted = true;
                     runnerSystem->SetEnabled(true);
@@ -788,6 +788,32 @@ int main(int argc, char **argv)
                 obstaclesCanSpawn = false;
             }
 
+            // 2.5 Obstacle collision check
+            auto &playerCollider = registry.GetComponent<ECS::Components::AABBCollider>(player);
+            auto &playerComponent = registry.GetComponent<RunnerComponent>(player);
+            if (playerCollider.isColliding)
+            {
+                for (auto &collidingEntity : playerCollider.collidingEntities)
+                {
+                    if (registry.HasComponent<ObstacleComponent>(collidingEntity))
+                    {
+                        playerComponent.obstacleHits++;
+                        registry.DestroyEntity(collidingEntity);
+                    }
+                }
+            }
+
+            if (playerComponent.obstacleHits >= 3)
+            {
+                gameScene = GAMEOVER;
+                runnerSystem->SetEnabled(false);
+                playerAnimation = lowPolyManModel.GetAnimation(0);
+                if (playerAnimation)
+                {
+                    playerAnimator.PlayAnimation(playerAnimation);
+                }
+            }
+
             // playerAnimator.UpdateAnimation(deltaTime);
             finalBones = playerAnimator.GetFinalBoneMatrices();
 
@@ -880,10 +906,43 @@ int main(int argc, char **argv)
                 .SetColor({1.0f, 0.0f, 0.0f, 0.5f})
                 .Render(-0.95f, 0.70f, std::format("DISTANCE: {:.0f}", metersRunned));
 
-            auto &playerComponent = registry.GetComponent<RunnerComponent>(player);
             fontBearDays.SetScale(0.75f, static_cast<float>(window.GetWidth()), static_cast<float>(window.GetHeight()))
                 .SetColor({1.0f, 1.0f, 0.0f, 0.5f})
                 .Render(-0.95f, 0.85f, std::format("SCORE: {}", playerComponent.score));
+            break;
+        }
+        case GAMEOVER:
+        {
+            auto finalBones = playerAnimator.GetFinalBoneMatrices();
+
+            auto playerTransform = registry.GetComponent<ECS::Components::Transform>(player);
+            model = glm::translate(glm::mat4(1.0f), playerTransform.translation) * glm::mat4_cast(playerTransform.rotation) * glm::scale(glm::mat4(1.0f), playerTransform.scale);
+            model = glm::translate(model, {0.0f, -0.80f, 0.0f});
+            model = glm::rotate(model, glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f));
+            model = glm::scale(model, glm::vec3(0.20f));
+            shader.Set<4, 4>(uniforms.model, model);
+            for (unsigned int i = 0; i < finalBones.size(); i++)
+                shader.Set<4, 4>(std::format("bones[{}]", i).c_str(), finalBones[i]);
+            lowPolyManModel.Render(shader);
+
+            for (unsigned int i = 0; i < MAX_BONES; i++)
+                shader.Set<4, 4>(std::format("bones[{}]", i).c_str(), glm::mat4(1.0f));
+
+            fontBearDays.SetScale(1.8f, static_cast<float>(window.GetWidth()), static_cast<float>(window.GetHeight()))
+                .SetColor(glm::vec4(1.0f, 0.0f, 0.0f, 1.0f))
+                .Render(-0.5f, 0.0f, "GAME OVER");
+
+            if (keyboard.GetKeyPress(GLFW_KEY_C))
+            {
+                gameScene = MAINMENU;
+                mainCamera = &menuCamera;
+                playerAnimation = lowPolyManModel.GetAnimation(2);
+                if (playerAnimation)
+                {
+                    playerAnimator.PlayAnimation(playerAnimation);
+                }
+            }
+
             break;
         }
             // endregion Game Logic
@@ -940,17 +999,6 @@ int main(int argc, char **argv)
             ImGui::Text("Entities in scene: %lu", registry.GetEntityCount());
             if (ImGui::Checkbox("Vsync", &debugSettings.enableVsync))
                 window.EnableVsync(debugSettings.enableVsync);
-
-            if (gameScene == MAINMENU && !mainGameStarted)
-            {
-                if (ImGui::Button("Start Game"))
-                {
-                    LoadInGameEntities(shader);
-                    mainGameStarted = true;
-                    runnerSystem->SetEnabled(true);
-                    gameScene = INGAME;
-                }
-            }
 
             ImGui::Checkbox("Grid", &enableGrid);
             ImGui::Checkbox("Skybox", &enableSkybox);
