@@ -127,6 +127,22 @@ Model microbus(
     "."
 #endif
     "./assets/models/Microbus/Microbus.obj");
+Model storeModel(
+#if defined(DEBUG) || defined(USE_DEBUG_ASSETS)
+    "."
+#endif
+    "./assets/models/Store/Store.obj");
+Model coinModel(
+#if defined(DEBUG) || defined(USE_DEBUG_ASSETS)
+    "."
+#endif
+    "./assets/models/Coin/Coin.obj");
+// Model buildingModel(
+// #if defined(DEBUG) || defined(USE_DEBUG_ASSETS)
+// "."
+// #endif
+// "./assets/models/Store/Store.obj"
+//     );
 
 Model lowPolyManModel(
 #if defined(DEBUG) || defined(USE_DEBUG_ASSETS)
@@ -217,6 +233,7 @@ float metersRunned = 0.0f;
 int pathsGenerated = 0;
 bool obstaclesCanSpawn = false;
 constexpr int generatorSpaceInterval = 6;
+constexpr int maxLives = 3;
 
 // endregion Game Variables
 
@@ -384,6 +401,12 @@ void GenerateBuildingsInfo()
         .meshRenderer = {.model = &oxxoStore, .shader = &shader},
         .buildingComponent = {.border = {1.0f, 1.0f, 1.0f}}
     };
+    buildingGenComponents["store"] = {
+        .transform = {
+                      .scale = glm::vec3(1.0f)},
+        .meshRenderer = {.model = &oxxoStore, .shader = &shader},
+        .buildingComponent = {.border = {1.0f, 1.0f, 1.0f}}
+    };
 }
 
 int main(int argc, char **argv)
@@ -426,6 +449,7 @@ int main(int argc, char **argv)
     iceCreamCart.Load();
     microbus.Load();
     lowPolyManModel.Load();
+    coinModel.Load();
 
     playerAnimation = lowPolyManModel.GetAnimation(2);
     if (playerAnimation)
@@ -859,13 +883,6 @@ int main(int argc, char **argv)
                         .AddComponent(obstacle, ECS::Components::AABBCollider{.min = randomObstacle.collider.min, .max = randomObstacle.collider.max})
                         .AddComponent(obstacle, randomObstacle.meshRenderer)
                         .AddComponent(obstacle, ObstacleComponent{});
-
-                    // registry
-                    //     .AddComponent(obstacle, ECS::Components::Transform{
-                    //                                 .translation = {lastPathTransform.translation.x, 1.0f, obstaclePos}
-                    // })
-                    //     .AddComponent(obstacle, ObstacleComponent{})
-                    //     .AddComponent(obstacle, ECS::Components::AABBCollider{.min = glm::vec3(-0.5f), .max = glm::vec3(0.5f)});
                 }
 
                 // 2.4 Create new coins ================================================================================
@@ -884,8 +901,10 @@ int main(int argc, char **argv)
                         ECS::Entity coin = registry.CreateEntity();
                         registry
                             .AddComponent(coin, ECS::Components::Transform{
-                                                    .translation = {lastPathTransform.translation.x + (static_cast<float>(i) * 2.0f), 1.0f, coinLanePos}
+                                                    .translation = {lastPathTransform.translation.x + (static_cast<float>(i) * 2.0f), 1.0f, coinLanePos},
+                                                    .scale = glm::vec3(0.8f)
                         })
+                            .AddComponent(coin, ECS::Components::MeshRenderer{.model = &coinModel, .shader = &shader})
                             .AddComponent(coin, ECS::Components::AABBCollider{.min = glm::vec3(-0.25f), .max = glm::vec3(0.25f)})
                             .AddComponent(coin, CoinComponent{5});
                     }
@@ -909,7 +928,7 @@ int main(int argc, char **argv)
                 }
             }
 
-            if (playerComponent.obstacleHits >= 3)
+            if (playerComponent.obstacleHits >= maxLives)
             {
                 gameScene = GAMEOVER;
                 runnerSystem->SetEnabled(false);
@@ -1015,6 +1034,10 @@ int main(int argc, char **argv)
             fontBearDays.SetScale(0.75f, static_cast<float>(window.GetWidth()), static_cast<float>(window.GetHeight()))
                 .SetColor({1.0f, 1.0f, 0.0f, 0.5f})
                 .Render(-0.95f, 0.85f, std::format("SCORE: {}", playerComponent.score));
+
+            fontBearDays.SetScale(0.75f, static_cast<float>(window.GetWidth()), static_cast<float>(window.GetHeight()))
+                .SetColor({1.0f, 1.0f, 1.0f, 0.5f})
+                .Render(0.75f, 0.85f, std::format("Lives: {}", maxLives - playerComponent.obstacleHits));
             break;
         }
         case GAMEOVER:
