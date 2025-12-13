@@ -1,7 +1,9 @@
 #include "CoinSystem.h"
 #include "../Components/CoinComponent.h"
 #include "../Components/RunnerComponent.h"
+#include "ECS/Components/AudioSource.h"
 #include "ECS/Components/Collider.h"
+#include <AL/al.h>
 #include <GLFW/glfw3.h>
 
 void CoinSystem::Update(ECS::Registry &registry, [[maybe_unused]] float dt)
@@ -24,6 +26,18 @@ void CoinSystem::Update(ECS::Registry &registry, [[maybe_unused]] float dt)
             auto &runner = registry.GetComponent<RunnerComponent>(player);
             auto &[value] = registry.GetComponent<CoinComponent>(entity);
             runner.score += value;
+
+            if (registry.HasComponent<ECS::Components::AudioSource>(player))
+            {
+                auto &audioSource = registry.GetComponent<ECS::Components::AudioSource>(player);
+                audioSource.filePath =
+#if defined(DEBUG) || defined(USE_DEBUG_ASSETS)
+                    "."
+#endif
+                    "./sounds/coin.wav";
+                audioSource.isDirty = true;
+            }
+
             registry.DestroyEntity(entity);
         }
     }

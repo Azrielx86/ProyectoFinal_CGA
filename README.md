@@ -71,6 +71,14 @@ Compilación
 cmake --build .
 ```
 
+## Capturas
+
+![Menu](./docs/menu.png)
+
+![Game](./docs/game.png)
+
+![GameOver](./docs/gameover.png)]
+
 ## Créditos de los modelos 3D utilizados
 
 * [Bearded man - Low poly animated](https://skfb.ly/oqBtx)

@@ -16,11 +16,14 @@
 #include "DebugSettings.h"
 #include "DepthCubemap.h"
 #include "DepthMap.h"
+#include "ECS/Components/AudioListener.h"
+#include "ECS/Components/AudioSource.h"
 #include "ECS/Components/Collider.h"
 #include "ECS/Components/MeshRenderer.h"
 #include "ECS/Components/Transform.h"
 #include "ECS/Registry.h"
 #include "ECS/SystemManager.h"
+#include "ECS/Systems/AudioSystem.h"
 #include "ECS/Systems/CollisionSystem.h"
 #include "ECS/Systems/RenderSystem.h"
 #include "FontType.h"
@@ -211,6 +214,7 @@ ECS::SystemManager systemManager;
 
 ECS::Entity player;
 ECS::Entity floorEntity;
+ECS::Entity cameraEntity;
 
 ECS::Entity lastPath;
 
@@ -295,7 +299,8 @@ void LoadInGameEntities()
                                   .translation = {0.0f, 2.0f, 0.0f}
     })
         .AddComponent(player, RunnerComponent{})
-        .AddComponent(player, ECS::Components::AABBCollider{.min = {-0.25f, -0.7f, -0.25f}, .max = {0.25f, 0.7f, 0.25f}});
+        .AddComponent(player, ECS::Components::AABBCollider{.min = {-0.25f, -0.7f, -0.25f}, .max = {0.25f, 0.7f, 0.25f}})
+        .AddComponent(player, ECS::Components::AudioSource{});
 
     floorEntity = registry.CreateEntity();
     registry
@@ -305,6 +310,10 @@ void LoadInGameEntities()
     })
         .AddComponent(floorEntity, ECS::Components::AABBCollider{.min = {-10.0f, -0.5f, -25.31f}, .max = {10.0f, 0.5f, 25.31f}})
         .AddComponent(floorEntity, FloorComponent{});
+
+    cameraEntity = registry.CreateEntity();
+    registry.AddComponent(cameraEntity, ECS::Components::Transform{})
+        .AddComponent(cameraEntity, ECS::Components::AudioListener{});
 
     for (int i = 0; i < 2; i++)
     {
@@ -327,7 +336,7 @@ void renderScene(Shader &shd)
     glm::mat4 model;
     // region MainMenuScene
     // draw paths
-    for (unsigned int i = 0; i < 10; i++)
+    for (unsigned int i = 0; i < 15; i++)
     {
         model = glm::mat4(1.0f);
         model = glm::translate(model, {2.0f * static_cast<float>(i), 0.0f, 0.0f});
@@ -336,11 +345,21 @@ void renderScene(Shader &shd)
         pathChunk01.Render(shd);
     }
 
-    // Render OXXO
+    // Buildings
     model = glm::translate(glm::mat4(1.0f), {5.0f, 0.0f, -9.0f});
     model = glm::scale(model, glm::vec3(0.30f));
     shd.Set<4, 4>("model", model);
     oxxoStore.Render(shd);
+
+    model = glm::translate(glm::mat4(1.0f), {15.0f, 0.0f, -9.0f});
+    model = glm::scale(model, glm::vec3(0.8f));
+    shd.Set<4, 4>("model", model);
+    buildingModel.Render(shd);
+
+    model = glm::translate(glm::mat4(1.0f), {25.0f, 0.0f, -9.0f});
+    model = glm::scale(model, glm::vec3(1.4f));
+    shd.Set<4, 4>("model", model);
+    storeModel.Render(shd);
 
     // Render Ice Cream Cart
     model = glm::translate(glm::mat4(1.0f), {5.2f, 0.65f, -1.45f});
@@ -420,11 +439,9 @@ void GenerateBuildingsInfo()
     };
 }
 
-int main(int argc, char **argv)
+int main()
 {
     Window window(1280, 720, "Proyecto Final CGA");
-
-    alutInit(&argc, argv);
 
     if (!window.Init())
     {
@@ -437,6 +454,8 @@ int main(int argc, char **argv)
     registry.RegisterComponent<ECS::Components::Transform>();
     registry.RegisterComponent<ECS::Components::MeshRenderer>();
     registry.RegisterComponent<ECS::Components::AABBCollider>();
+    registry.RegisterComponent<ECS::Components::AudioSource>();
+    registry.RegisterComponent<ECS::Components::AudioListener>();
     registry.RegisterComponent<RunnerComponent>();
     registry.RegisterComponent<FloorComponent>();
     registry.RegisterComponent<PathComponent>();
@@ -445,11 +464,14 @@ int main(int argc, char **argv)
     registry.RegisterComponent<CoinComponent>();
     systemManager.RegisterSystem<ECS::Systems::CollisionSystem>();
     systemManager.RegisterSystem<ECS::Systems::RenderSystem>();
+    systemManager.RegisterSystem<ECS::Systems::AudioSystem>();
     systemManager.RegisterSystem<RunnerSystem>();
     systemManager.RegisterSystem<CoinSystem>();
 
     auto runnerSystem = systemManager.GetSystem<RunnerSystem>();
     runnerSystem->SetEnabled(false);
+
+    auto audioSystem = systemManager.GetSystem<ECS::Systems::AudioSystem>();
 
     resources.ScanResources();
     Resources::ResourceManager::InitDefaultResources();
@@ -807,6 +829,11 @@ int main(int argc, char **argv)
         }
         case INGAME:
         {
+            // Update camera listener
+            auto &cameraTransform = registry.GetComponent<ECS::Components::Transform>(cameraEntity);
+            cameraTransform.translation = mainCamera->GetPosition();
+            // cameraTransform.rotation = mainCamera->GetRotation(); // Assuming Camera has GetRotation
+
             std::vector<glm::mat4> finalBones;
             // region Game Logic
             metersRunned += debugSettings.pathVelocity * deltaTime;
@@ -1135,6 +1162,9 @@ int main(int argc, char **argv)
             fontBearDays.SetScale(1.8f, static_cast<float>(window.GetWidth()), static_cast<float>(window.GetHeight()))
                 .SetColor(glm::vec4(1.0f, 0.0f, 0.0f, 1.0f))
                 .Render(-0.5f, 0.0f, "GAME OVER");
+            fontBearDays.SetScale(0.65f, static_cast<float>(window.GetWidth()), static_cast<float>(window.GetHeight()))
+                .SetColor(glm::vec4(1.0f, 0.0f, 0.0f, 1.0f))
+                .Render(-0.3f, -0.15f, "Press 'C' to return");
 
             if (keyboard.GetKeyPress(GLFW_KEY_C))
             {
@@ -1333,8 +1363,6 @@ int main(int argc, char **argv)
     }
 
     SaveSettings();
-
-    alutExit();
 
     return 0;
 }
