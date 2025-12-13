@@ -6,6 +6,10 @@ Facultad de Ingeniería UNAM
 Moreno Chalico Edgar Ulises
 ```
 
+## Requerimientos de ejecución
+
+Este proyecto requeire de Visual C++ Redistributable v14 disponible en [este enlace](https://aka.ms/vc14/vc_redist.x64.exe).
+
 ## Ajustes de compilación
 
 Estos ajustes se pueden configurar de la siguiente manera:
@@ -19,9 +23,13 @@ cmake .. -DENABLE_LOG=1 -DENABLE_GL_DEBUG=1 -DUSE_DEBUG_ASSETS=1
 * `ENABLE_LOG`: Habilita algunos logs adicionales para mostrar información relevante en tiempo de ejecución.
 * `ENABLE_GL_DEBUG`: Habilita el modo de depuración de OpenGL.
 * `USE_DEBUG_ASSETS`: Utiliza los assets directamente sin tener que reconfigurar el proyecto.
-* `FETCH_EXTERNAL_ASSIMP`: Descarga, compila y utiliza assimp v5.4.3. Útil para hacer debug de el importado de modelos o
+* `FETCH_EXTERNAL_ASSIMP`: Descarga, compila y utiliza assimp v6.0.2. Útil para hacer debug de el importado de modelos o
   cualquier cosa que requiera los símbolos de assimp.
 * `FIX_ASSIMP_MEMCALL`: Corrige un error de compilación de assimp, habilitar solo si sucede el error.
+
+> [!IMPORTANT]
+> En Windows **es necesario** compilar con `FETCH_EXTERNAL_ASSIMP`, ya que la versión de assimp en vcpkg tiene
+> errores y los modelos animados no se muestran correctamente.
 
 ## Configuración del entorno recomendado
 

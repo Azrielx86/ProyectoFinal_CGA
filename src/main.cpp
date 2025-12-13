@@ -380,15 +380,9 @@ void GenerateBuildingsInfo()
 {
     buildingGenComponents["oxxo"] = {
         .transform = {
-            .scale = glm::vec3(0.30f)
-        },
-        .meshRenderer = {
-            .model = &oxxoStore,
-            .shader = &shader
-        },
-        .buildingComponent = {
-            .border = {1.0f, 1.0f, 1.0f}
-        }
+                      .scale = glm::vec3(0.30f)},
+        .meshRenderer = {.model = &oxxoStore, .shader = &shader},
+        .buildingComponent = {.border = {1.0f, 1.0f, 1.0f}}
     };
 }
 
@@ -558,9 +552,19 @@ int main(int argc, char **argv)
         .specular = {0.08f, 0.08f, 0.08f}
     });
 
-    FontType fontBearDays(static_cast<float>(window.GetWidth()), static_cast<float>(window.GetHeight()), "../fonts/BearDays.ttf", 1.2f);
+    FontType fontBearDays(static_cast<float>(window.GetWidth()), static_cast<float>(window.GetHeight()),
+#if defined(DEBUG) || defined(USE_DEBUG_ASSETS)
+                          "."
+#endif
+                          "./fonts/BearDays.ttf",
+                          1.2f);
     fontBearDays.Init();
-    FontType fontArial(static_cast<float>(window.GetWidth()), static_cast<float>(window.GetHeight()), "../fonts/arial.ttf", 0.30f);
+    FontType fontArial(static_cast<float>(window.GetWidth()), static_cast<float>(window.GetHeight()),
+#if defined(DEBUG) || defined(USE_DEBUG_ASSETS)
+                       "."
+#endif
+                       "./fonts/arial.ttf",
+                       0.30f);
     fontArial.Init();
 
     ConfigureKeys(window);
@@ -841,8 +845,7 @@ int main(int argc, char **argv)
                     constexpr float laneWidth = 2.0f;
                     const float obstaclePos = (static_cast<float>(i) * laneWidth) - laneWidth;
                     ECS::Entity obstacle = registry.CreateEntity();
-
-                    std::uniform_int_distribution<unsigned long> obstacleTypeGenerator(0, obstacleGenComponents.size() - 1);
+                    std::uniform_int_distribution<size_t> obstacleTypeGenerator(0, obstacleGenComponents.size() - 1);
                     auto it = obstacleGenComponents.begin();
                     std::advance(it, obstacleTypeGenerator(generator));
                     // ReSharper disable once CppUseStructuredBinding
@@ -1099,7 +1102,12 @@ int main(int argc, char **argv)
             ImGui::Text("Delta time = %f", static_cast<double>(deltaTime));
             ImGui::Text("FPS = %f", static_cast<double>(fps));
             ImGui::Text("Paths generated: %d", pathsGenerated);
+#ifdef WIN32
+            ImGui::Text("Entities in scene: %zu", registry.GetEntityCount());
+#else
             ImGui::Text("Entities in scene: %lu", registry.GetEntityCount());
+#endif
+
             if (ImGui::Checkbox("Vsync", &debugSettings.enableVsync))
                 window.EnableVsync(debugSettings.enableVsync);
 
