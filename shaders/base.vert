@@ -14,6 +14,7 @@ out vec3 FragPos;
 out vec3 FragView;
 out mat3 TBN;
 out float visibility;
+out vec4 FragPosLightSpace;
 
 const int MAX_BONES = 200;
 const int MAX_BONE_INFLUENCE = 4;
@@ -23,6 +24,7 @@ uniform int numBones;
 uniform mat4 view;
 uniform mat4 projection;
 uniform mat4 model;
+uniform mat4 lightSpaceMatrix;
 uniform float density = 0.025;
 uniform float gradient = 1.5;
 
@@ -61,6 +63,8 @@ void main() {
     float distance = length(fragPosViewSpace);
     visibility = exp(-pow((distance * density), gradient));
     visibility = clamp(visibility, 0.0f, 1.0f);
+
+    FragPosLightSpace = lightSpaceMatrix * worldPos;
 
     gl_Position = projection * view * worldPos;
 }

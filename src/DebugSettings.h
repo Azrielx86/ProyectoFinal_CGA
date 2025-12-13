@@ -5,18 +5,18 @@
 
 struct DebugSettings
 {
-    float pathVelocity = 1.0f;
+    float pathVelocity = 25.0f;
     float cameraMoveSpeed = 5.0f;
     float cameraTurnSpeed = 75.0f;
     bool enablePixelate = true;
-    int pixelateResolution = 320;
+    int pixelateResolution = 520;
     bool enableVsync = true;
     bool showHitboxes = false;
 };
 
 inline void from_json(const nlohmann::json &j, DebugSettings &settings)
 {
-    if (j.contains("path_velocity")) j.at("path_velocity").get_to(settings.pathVelocity);
+    // if (j.contains("path_velocity")) j.at("path_velocity").get_to(settings.pathVelocity);
     if (j.contains("camera_move_speed")) j.at("camera_move_speed").get_to(settings.cameraMoveSpeed);
     if (j.contains("camera_turn_speed")) j.at("camera_turn_speed").get_to(settings.cameraTurnSpeed);
     if (j.contains("enable_pixelate")) j.at("enable_pixelate").get_to(settings.enablePixelate);
@@ -28,7 +28,7 @@ inline void from_json(const nlohmann::json &j, DebugSettings &settings)
 inline void to_json(nlohmann::json &j, const DebugSettings &settings)
 {
     j = nlohmann::json{
-        {"path_velocity", settings.pathVelocity},
+        // {"path_velocity", settings.pathVelocity},
         {"camera_move_speed", settings.cameraMoveSpeed},
         {"camera_turn_speed", settings.cameraTurnSpeed},
         {"enable_pixelate", settings.enablePixelate},

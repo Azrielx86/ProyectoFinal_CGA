@@ -13,9 +13,10 @@
 #include "Components/PathComponent.h"
 #include "Components/RunnerComponent.h"
 #include "DebugSettings.h"
+#include "DepthCubemap.h"
+#include "DepthMap.h"
 #include "ECS/Components/Collider.h"
 #include "ECS/Components/MeshRenderer.h"
-#include "ECS/Components/PlayerController.h"
 #include "ECS/Components/Transform.h"
 #include "ECS/Registry.h"
 #include "ECS/SystemManager.h"
@@ -23,6 +24,7 @@
 #include "ECS/Systems/RenderSystem.h"
 #include "FontType.h"
 #include "Input/Keyboard.h"
+#include "Lights/DirectionalLight.h"
 #include "Lights/PointLight.h"
 #include "Model.h"
 #include "Primitives/Cube.h"
@@ -89,8 +91,8 @@ bool enableGrid = false;
 bool enableSkybox = true;
 bool enablePixelate = true;
 bool polygonMode = false;
-int pixelFbResolution = 320;
-int lastPixelFbResolution = 320;
+int pixelFbResolution = 520;
+int lastPixelFbResolution = 520;
 bool mainGameStarted = false;
 bool useFreeCamera = false;
 
@@ -290,6 +292,53 @@ void LoadInGameEntities(Shader &shader)
     // endregion Entities
 }
 
+void renderScene(Shader &shader)
+{
+    glm::mat4 model;
+    // region MainMenuScene
+    // draw paths
+    for (unsigned int i = 0; i < 10; i++)
+    {
+        model = glm::mat4(1.0f);
+        model = glm::translate(model, {2.0f * static_cast<float>(i), 0.0f, 0.0f});
+        model = glm::scale(model, glm::vec3(0.1f));
+        shader.Set<4, 4>("model", model);
+        pathChunk01.Render(shader);
+    }
+
+    // Render OXXO
+    model = glm::translate(glm::mat4(1.0f), {5.0f, 0.0f, -9.0f});
+    model = glm::scale(model, glm::vec3(0.30f));
+    shader.Set<4, 4>("model", model);
+    oxxoStore.Render(shader);
+
+    // Render Ice Cream Cart
+    model = glm::translate(glm::mat4(1.0f), {5.2f, 0.65f, -1.45f});
+    model = glm::rotate(model, glm::radians(120.0f), {0, 1, 0});
+    model = glm::rotate(model, glm::radians(-90.0f), {1, 0, 0});
+    model = glm::scale(model, glm::vec3(0.8f));
+    shader.Set<4, 4>("model", model);
+    iceCreamCart.Render(shader);
+
+    // TODO : Tsuru model
+    model = glm::translate(glm::mat4(1.0f), {8.0f, 0.10f, -1.6f});
+    model = glm::rotate(model, glm::radians(90.0f), {0, 1, 0});
+    model = glm::scale(model, glm::vec3(0.5f));
+    shader.Set<4, 4>("model", model);
+    tsuruCar.Render(shader);
+
+    auto finalBones = playerAnimator.GetFinalBoneMatrices();
+    model = glm::translate(glm::mat4(1.0f), {4.0f, 0.0f, -0.5f});
+    model = glm::scale(model, glm::vec3(0.15f));
+    shader.Set<4, 4>("model", model);
+    for (unsigned int i = 0; i < finalBones.size(); i++)
+        shader.Set<4, 4>(std::format("bones[{}]", i).c_str(), finalBones[i]);
+    lowPolyManModel.Render(shader);
+
+    for (unsigned int i = 0; i < MAX_BONES; i++)
+        shader.Set<4, 4>(std::format("bones[{}]", i).c_str(), glm::mat4(1.0f));
+}
+
 int main(int argc, char **argv)
 {
     Window window(1280, 720, "Proyecto Final CGA");
@@ -352,6 +401,8 @@ int main(int argc, char **argv)
     Shader gridShader = *resources.GetShader("infinite_grid");
     Shader fbPixelShader = *resources.GetShader("fb_pixel");
     Shader debugShader = *resources.GetShader("debug");
+    Shader depthShader = *resources.GetShader("depth_shader");
+    Shader pointDepthShader = *resources.GetShader("point_depth_shader");
 
     Framebuffer pixelFrameBuffer(fbPixelShader, window.GetWidth(), window.GetHeight());
     pixelFrameBuffer.SetMaxResolution(WIDTH, pixelFbResolution);
@@ -359,6 +410,12 @@ int main(int argc, char **argv)
     pixelFrameBuffer.CreateFramebuffer(window.GetWidth(), window.GetHeight());
 
     window.AddFramebuffer(&pixelFrameBuffer);
+
+    DepthMap depthMap;
+    depthMap.Init(2048, 2048);
+
+    DepthCubemap depthCubemap;
+    depthCubemap.Init(1024, 1024);
 
     Camera freeCamera({2.0f, 2.0f, 2.0f}, {0.0f, 1.0f, 0.0f});
     Camera menuCamera({3.0f, 1.0f, 2.8f}, {0.0f, 1.0f, 0.0f},
@@ -406,6 +463,14 @@ int main(int argc, char **argv)
         .isTurnedOn = true
     });
 
+    StorageBufferDynamicArray<Lights::DirectionalLight> directionalLights(4);
+    directionalLights.Add({
+        .direction = {0.0f,  -1.0f, 0.0f },
+        .ambient = {0.08f, 0.08f, 0.08f},
+        .diffuse = {0.08f, 0.08f, 0.08f},
+        .specular = {0.08f, 0.08f, 0.08f}
+    });
+
     FontType fontBearDays(static_cast<float>(window.GetWidth()), static_cast<float>(window.GetHeight()), "../fonts/BearDays.ttf", 1.2f);
     fontBearDays.Init();
     FontType fontArial(static_cast<float>(window.GetWidth()), static_cast<float>(window.GetHeight()), "../fonts/arial.ttf", 0.30f);
@@ -440,6 +505,47 @@ int main(int argc, char **argv)
             fpsCount = 0;
         }
 
+        // 1. render depth of scene to texture (from light's perspective)
+        // --------------------------------------------------------------
+        glm::mat4 lightProjection, lightView;
+        glm::mat4 lightSpaceMatrix;
+        float near_plane = 1.0f, far_plane = 7.5f;
+        lightProjection = glm::ortho(-10.0f, 10.0f, -10.0f, 10.0f, near_plane, far_plane);
+        lightView = glm::lookAt(-directionalLights[0].direction, glm::vec3(0.0f), glm::vec3(0.0, 1.0, 0.0));
+        lightSpaceMatrix = lightProjection * lightView;
+        // render scene from light's point of view
+        depthShader.Use();
+        depthShader.Set<4, 4>("lightSpaceMatrix", lightSpaceMatrix);
+
+        depthMap.Bind();
+        renderScene(depthShader);
+        depthMap.Unbind();
+
+        // 2. render depth cubemap
+        // --------------------------------
+        float aspect = static_cast<float>(1024) / static_cast<float>(1024);
+        near_plane = 1.0f;
+        far_plane = 25.0f;
+        glm::mat4 shadowProj = glm::perspective(glm::radians(90.0f), aspect, near_plane, far_plane);
+        std::vector<glm::mat4> shadowTransforms;
+        shadowTransforms.push_back(shadowProj * glm::lookAt(glm::vec3(pointLights[0].position), glm::vec3(pointLights[0].position) + glm::vec3(1.0, 0.0, 0.0), glm::vec3(0.0, -1.0, 0.0)));
+        shadowTransforms.push_back(shadowProj * glm::lookAt(glm::vec3(pointLights[0].position), glm::vec3(pointLights[0].position) + glm::vec3(-1.0, 0.0, 0.0), glm::vec3(0.0, -1.0, 0.0)));
+        shadowTransforms.push_back(shadowProj * glm::lookAt(glm::vec3(pointLights[0].position), glm::vec3(pointLights[0].position) + glm::vec3(0.0, 1.0, 0.0), glm::vec3(0.0, 0.0, 1.0)));
+        shadowTransforms.push_back(shadowProj * glm::lookAt(glm::vec3(pointLights[0].position), glm::vec3(pointLights[0].position) + glm::vec3(0.0, -1.0, 0.0), glm::vec3(0.0, 0.0, -1.0)));
+        shadowTransforms.push_back(shadowProj * glm::lookAt(glm::vec3(pointLights[0].position), glm::vec3(pointLights[0].position) + glm::vec3(0.0, 0.0, 1.0), glm::vec3(0.0, -1.0, 0.0)));
+        shadowTransforms.push_back(shadowProj * glm::lookAt(glm::vec3(pointLights[0].position), glm::vec3(pointLights[0].position) + glm::vec3(0.0, 0.0, -1.0), glm::vec3(0.0, -1.0, 0.0)));
+
+        depthCubemap.Bind();
+        pointDepthShader.Use();
+        for (unsigned int i = 0; i < 6; ++i)
+            pointDepthShader.Set<4, 4>(std::format("shadowMatrices[{}]", i).c_str(), shadowTransforms[i]);
+        pointDepthShader.Set("far_plane", far_plane);
+        pointDepthShader.Set<3>("lightPos", glm::vec3(pointLights[0].position));
+        renderScene(pointDepthShader);
+        depthCubemap.Unbind();
+
+        // render scene as normal using the generated depth/shadow map
+        // --------------------------------------------------------------
         if (enablePixelate)
         {
             if (pixelFbResolution != lastPixelFbResolution)
@@ -454,6 +560,7 @@ int main(int argc, char **argv)
         }
         else
         {
+            window.EnableWindowViewport();
             glBindFramebuffer(GL_FRAMEBUFFER, 0);
             glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -469,7 +576,6 @@ int main(int argc, char **argv)
         glm::mat4 model(1.0f);
         view = mainCamera->GetLookAt();
         projection = glm::perspective(glm::radians(45.0f), pixelFrameBuffer.GetAspect(), 0.1f, 100.0f);
-        std::vector<glm::mat4> finalBones;
 
         if (enableSkybox)
         {
@@ -483,16 +589,23 @@ int main(int argc, char **argv)
         shader.Use();
         uniforms.model = shader.GetUniformLocation("model");
 
+        playerAnimator.UpdateAnimation(deltaTime);
+
         shader.Set("pointLightsSize", static_cast<int>(pointLights.Size()));
+        shader.Set("directionalLightsSize", static_cast<int>(directionalLights.Size()));
         shader.Set<4, 4>("view", view);
         shader.Set<4, 4>("projection", projection);
         shader.Set<3>("ambientLightColor", glm::vec3{1.0f, 1.0f, 1.0f});
         shader.Set<3>("fogColor", glm::vec3(0.0f));
-
-        shader.Set<3>("directionalLight.direction", glm::vec3(0.0f, -1.0f, 0.0f));
-        shader.Set<3>("directionalLight.ambient", glm::vec3(0.08f, 0.08f, 0.08f));
-        shader.Set<3>("directionalLight.diffuse", glm::vec3(0.08f, 0.08f, 0.08f));
-        shader.Set<3>("directionalLight.specular", glm::vec3(0.08f, 0.08f, 0.08f));
+        shader.Set<4, 4>("lightSpaceMatrix", lightSpaceMatrix);
+        shader.Set("far_plane", far_plane);
+        shader.Set("calculatePointLightShadows", true);
+        glActiveTexture(GL_TEXTURE10);
+        glBindTexture(GL_TEXTURE_2D, depthMap.GetDepthMap());
+        shader.Set("shadowMap", 10);
+        glActiveTexture(GL_TEXTURE11);
+        glBindTexture(GL_TEXTURE_CUBE_MAP, depthCubemap.GetDepthMap());
+        shader.Set("depthMap", 11);
 
         systemManager.UpdateAll(registry, deltaTime);
 
@@ -500,51 +613,8 @@ int main(int argc, char **argv)
         {
         case MAINMENU:
         {
-            // region MainMenuScene
-            // draw paths
-            for (unsigned int i = 0; i < 10; i++)
-            {
-                model = glm::mat4(1.0f);
-                model = glm::translate(model, {2.0f * static_cast<float>(i), 0.0f, 0.0f});
-                model = glm::scale(model, glm::vec3(0.1f));
-                shader.Set<4, 4>(uniforms.model, model);
-                pathChunk01.Render(shader);
-            }
 
-            // Render OXXO
-            model = glm::translate(glm::mat4(1.0f), {5.0f, 0.0f, -9.0f});
-            model = glm::scale(model, glm::vec3(0.30f));
-            shader.Set<4, 4>(uniforms.model, model);
-            oxxoStore.Render(shader);
-
-            // Render Ice Cream Cart
-            model = glm::translate(glm::mat4(1.0f), {5.2f, 0.65f, -1.45f});
-            model = glm::rotate(model, glm::radians(120.0f), {0, 1, 0});
-            model = glm::rotate(model, glm::radians(-90.0f), {1, 0, 0});
-            model = glm::scale(model, glm::vec3(0.8f));
-            shader.Set<4, 4>(uniforms.model, model);
-            iceCreamCart.Render(shader);
-
-            // TODO : Tsuru model
-            model = glm::translate(glm::mat4(1.0f), {8.0f, 0.10f, -1.6f});
-            model = glm::rotate(model, glm::radians(90.0f), {0, 1, 0});
-            model = glm::scale(model, glm::vec3(0.5f));
-            shader.Set<4, 4>(uniforms.model, model);
-            tsuruCar.Render(shader);
-
-            playerAnimator.UpdateAnimation(deltaTime);
-            finalBones = playerAnimator.GetFinalBoneMatrices();
-            model = glm::translate(glm::mat4(1.0f), {4.0f, 0.0f, -0.5f});
-            model = glm::scale(model, glm::vec3(0.15f));
-            shader.Set<4, 4>(uniforms.model, model);
-            for (unsigned int i = 0; i < finalBones.size(); i++)
-                shader.Set<4, 4>(std::format("bones[{}]", i).c_str(), finalBones[i]);
-            lowPolyManModel.Render(shader);
-
-            for (unsigned int i = 0; i < MAX_BONES; i++)
-                shader.Set<4, 4>(std::format("bones[{}]", i).c_str(), glm::mat4(1.0f));
-
-            // endregion MainMenuScene
+            renderScene(shader);
 
             fontBearDays.SetScale(1.2f, static_cast<float>(window.GetWidth()), static_cast<float>(window.GetHeight()))
                 .SetColor(currentOption == START ? glm::vec4(1.0f) : glm::vec4(0.8f, 0.8f, 0.8f, 1.0f))
@@ -608,6 +678,7 @@ int main(int argc, char **argv)
         }
         case INGAME:
         {
+            std::vector<glm::mat4> finalBones;
             // region Game Logic
             metersRunned += debugSettings.pathVelocity * deltaTime;
             // * ================================================================= *
@@ -717,7 +788,7 @@ int main(int argc, char **argv)
                 obstaclesCanSpawn = false;
             }
 
-            playerAnimator.UpdateAnimation(deltaTime);
+            // playerAnimator.UpdateAnimation(deltaTime);
             finalBones = playerAnimator.GetFinalBoneMatrices();
 
             auto playerTransform = registry.GetComponent<ECS::Components::Transform>(player);
@@ -913,7 +984,7 @@ int main(int argc, char **argv)
 
             ImGui::Begin("Lights control");
 
-            if (ImGui::Button("Add light"))
+            if (ImGui::Button("Add point light"))
             {
                 pointLights.Add({
                     .position = {0.0f, 0.0f, 2.0f, 0.0f},
@@ -951,6 +1022,43 @@ int main(int argc, char **argv)
 
                 ImGui::PopID();
             }
+
+            ImGui::Separator();
+
+            if (ImGui::Button("Add directional light"))
+            {
+                directionalLights.Add({
+                    .direction = {0.0f, -1.0f, 0.0f},
+                    .ambient = {0.1f, 0.1f,  0.1f},
+                    .diffuse = {1.0f, 1.0f,  1.0f},
+                    .specular = {1.0f, 1.0f,  1.0f}
+                });
+            }
+
+            for (size_t i = 0; i < directionalLights.Size(); ++i)
+            {
+                Lights::DirectionalLight &dLight = directionalLights[i];
+                ImGui::PushID(std::format("DL{}", i).c_str());
+                ImGui::Columns(3, "Direction");
+                ImGui::DragFloat("X", &dLight.direction.x, 0.01f);
+                ImGui::NextColumn();
+                ImGui::DragFloat("Y", &dLight.direction.y, 0.01f);
+                ImGui::NextColumn();
+                ImGui::DragFloat("Z", &dLight.direction.z, 0.01f);
+                ImGui::Columns(1);
+                dLight.direction = glm::normalize(dLight.direction);
+                ImGui::SeparatorText(std::format("Directional Light {}", i).c_str());
+                ImGui::ColorEdit3("Ambient", reinterpret_cast<float *>(&dLight.ambient), ImGuiColorEditFlags_Float);
+                ImGui::ColorEdit3("Diffuse", reinterpret_cast<float *>(&dLight.diffuse), ImGuiColorEditFlags_Float);
+                ImGui::ColorEdit3("Specular", reinterpret_cast<float *>(&dLight.specular), ImGuiColorEditFlags_Float);
+                directionalLights.UpdateIndex(i);
+
+                if (ImGui::Button(std::format("Delete", i).c_str()))
+                    directionalLights.Remove(i);
+
+                ImGui::PopID();
+            }
+
             ImGui::End();
         }
         // endregion
