@@ -46,6 +46,7 @@
 #include <fstream>
 #include <iostream>
 #include <random>
+#include <vector>
 
 #define RGBCOLOR(r, g, b) glm::vec3(r / 255.0f, g / 255.0f, b / 255.0f)
 
@@ -241,7 +242,7 @@ void LoadInGameEntities(Shader &shader)
                                   .translation = {0.0f, 2.0f, 0.0f}
     })
         .AddComponent(player, RunnerComponent{})
-        .AddComponent(player, ECS::Components::AABBCollider{.min = {-0.5f, -1.0f, -0.5f}, .max = {0.5f, 1.0f, 0.5f}});
+        .AddComponent(player, ECS::Components::AABBCollider{.min = {-0.3f, -1.0f, -0.3f}, .max = {0.3f, 1.0f, 0.3f}});
 
     floorEntity = registry.CreateEntity();
     registry
@@ -305,10 +306,7 @@ int main(int argc, char **argv)
 
     registry.RegisterComponent<ECS::Components::Transform>();
     registry.RegisterComponent<ECS::Components::MeshRenderer>();
-    registry.RegisterComponent<ECS::Components::PlayerController>();
     registry.RegisterComponent<ECS::Components::AABBCollider>();
-    registry.RegisterComponent<ECS::Components::SBBCollider>();
-    registry.RegisterComponent<ECS::Components::OBBCollider>();
     registry.RegisterComponent<RunnerComponent>();
     registry.RegisterComponent<FloorComponent>();
     registry.RegisterComponent<PathComponent>();
@@ -615,7 +613,7 @@ int main(int argc, char **argv)
             // * ================================================================= *
             // * Path Generation                                                   *
             // * ================================================================= *
-            // 1.1 Path movement update ====================================================================================
+            // 1.1 Path movement update ================================================================================
             for (ECS::Entity pathEntity : registry.View<PathComponent, ECS::Components::Transform>())
             {
                 auto &transform = registry.GetComponent<ECS::Components::Transform>(pathEntity);
@@ -626,7 +624,7 @@ int main(int argc, char **argv)
                     registry.DestroyEntity(pathEntity);
             }
 
-            // 1.2 Create required new paths ===============================================================================
+            // 1.2 Create required new paths ===========================================================================
             if (const auto &lastPathTransform = registry.GetComponent<ECS::Components::Transform>(lastPath);
                 lastPathTransform.translation.x <= 100.0f)
             {
@@ -643,9 +641,9 @@ int main(int argc, char **argv)
             }
 
             // * ================================================================= *
-            // * Obstacles generation                                              *
+            // * Obstacles and Coins generation                                    *
             // * ================================================================= *
-            // 2.1 Update obstacles ================================================
+            // 2.1 Update obstacles ====================================================================================
             for (const ECS::Entity obstacle : registry.View<ObstacleComponent, ECS::Components::Transform>())
             {
                 auto &transform = registry.GetComponent<ECS::Components::Transform>(obstacle);
@@ -655,37 +653,7 @@ int main(int argc, char **argv)
                     registry.DestroyEntity(obstacle);
             }
 
-            // 2.2 Create new obstacles ============================================
-            if (pathsGenerated == 0 && obstaclesCanSpawn)
-            {
-                const auto &lastPathTransform = registry.GetComponent<ECS::Components::Transform>(lastPath);
-
-                const int genIdx = obstaclePatternGenerator(generator);
-                auto pattern = ObstaclePatterns[genIdx];
-
-                for (size_t i = 0; i < pattern.size(); i++)
-                {
-                    if (pattern[i] == CLEAN) continue;
-
-                    constexpr float laneWidth = 2.0f;
-                    float obstaclePos = (static_cast<float>(i) * laneWidth) - laneWidth;
-                    ECS::Entity obstacle = registry.CreateEntity();
-                    registry
-                        .AddComponent(obstacle, ECS::Components::Transform{
-                                                    .translation = {lastPathTransform.translation.x, 1.0f, obstaclePos}
-                    })
-                        .AddComponent(obstacle, ObstacleComponent{})
-                        .AddComponent(obstacle, ECS::Components::AABBCollider{.min = glm::vec3(-0.5f), .max = glm::vec3(0.5f)});
-
-                    // obstaclesEntities.push_front(obstacle);
-                    obstaclesCanSpawn = false;
-                }
-            }
-
-            // * ================================================================= *
-            // * Coins generation                                                  *
-            // * ================================================================= *
-            // 3.1 Update coins ====================================================
+            // 2.2 Update coins ========================================================================================
             for (const ECS::Entity coin : registry.View<CoinComponent, ECS::Components::Transform>())
             {
                 auto &transform = registry.GetComponent<ECS::Components::Transform>(coin);
@@ -695,25 +663,58 @@ int main(int argc, char **argv)
                     registry.DestroyEntity(coin);
             }
 
-            // 3.3 Create new coins ================================================
+            // 2.3 Create new obstacles and coins ======================================================================
             if (pathsGenerated == 0 && obstaclesCanSpawn)
             {
+                const auto &lastPathTransform = registry.GetComponent<ECS::Components::Transform>(lastPath);
 
-                // ! NOT WORKING, REMOVE LATER
-                // const auto &lastPathTransform = registry.GetComponent<ECS::Components::Transform>(lastPath);
-                //
-                // for (size_t i = 0; i < 3; i++)
-                // {
-                //     constexpr float laneWidth = 2.0f;
-                //     float coinPos = (static_cast<float>(i) * laneWidth) - laneWidth;
-                //     ECS::Entity coin = registry.CreateEntity();
-                //     registry
-                //         .AddComponent(coin, ECS::Components::Transform{
-                //                                 .translation = {lastPathTransform.translation.x, 1.0f, coinPos}
-                //     })
-                //         .AddComponent(coin, ECS::Components::AABBCollider{.min = glm::vec3(-0.5f), .max = glm::vec3(0.5f)})
-                //         .AddComponent(coin, CoinComponent{10});
-                // }
+                const int genIdx = obstaclePatternGenerator(generator);
+                const auto pattern = ObstaclePatterns[genIdx];
+
+                std::vector<size_t> cleanLanes;
+                for (size_t i = 0; i < pattern.size(); i++)
+                {
+                    if (pattern[i] == CLEAN)
+                    {
+                        cleanLanes.push_back(i);
+                        continue;
+                    }
+
+                    constexpr float laneWidth = 2.0f;
+                    const float obstaclePos = (static_cast<float>(i) * laneWidth) - laneWidth;
+                    ECS::Entity obstacle = registry.CreateEntity();
+                    registry
+                        .AddComponent(obstacle, ECS::Components::Transform{
+                                                    .translation = {lastPathTransform.translation.x, 1.0f, obstaclePos}
+                    })
+                        .AddComponent(obstacle, ObstacleComponent{})
+                        .AddComponent(obstacle, ECS::Components::AABBCollider{.min = glm::vec3(-0.5f), .max = glm::vec3(0.5f)});
+                }
+
+                // 2.4 Create new coins ================================================================================
+                if (!cleanLanes.empty())
+                {
+                    std::uniform_int_distribution<size_t> laneDist(0, cleanLanes.size() - 1);
+                    const size_t chosenLaneIndex = cleanLanes[laneDist(generator)];
+                    constexpr float laneWidth = 2.0f;
+                    const float coinLanePos = (static_cast<float>(chosenLaneIndex) * laneWidth) - laneWidth;
+
+                    std::uniform_int_distribution<int> coinsCountDist(5, 10);
+                    const int coinsInRow = coinsCountDist(generator);
+
+                    for (int i = 0; i < coinsInRow; i++)
+                    {
+                        ECS::Entity coin = registry.CreateEntity();
+                        registry
+                            .AddComponent(coin, ECS::Components::Transform{
+                                                    .translation = {lastPathTransform.translation.x + (static_cast<float>(i) * 2.0f), 1.0f, coinLanePos}
+                        })
+                            .AddComponent(coin, ECS::Components::AABBCollider{.min = glm::vec3(-0.25f), .max = glm::vec3(0.25f)})
+                            .AddComponent(coin, CoinComponent{5});
+                    }
+                }
+
+                obstaclesCanSpawn = false;
             }
 
             playerAnimator.UpdateAnimation(deltaTime);
@@ -804,14 +805,14 @@ int main(int argc, char **argv)
             }
             glDisable(GL_BLEND);
 
-            fontBearDays.SetScale(1.2f, static_cast<float>(window.GetWidth()), static_cast<float>(window.GetHeight()))
+            fontBearDays.SetScale(0.75f, static_cast<float>(window.GetWidth()), static_cast<float>(window.GetHeight()))
                 .SetColor({1.0f, 0.0f, 0.0f, 0.5f})
-                .Render(-0.95f, 0.80f, std::format("DISTANCE: {:.0f}", metersRunned));
+                .Render(-0.95f, 0.70f, std::format("DISTANCE: {:.0f}", metersRunned));
 
             auto &playerComponent = registry.GetComponent<RunnerComponent>(player);
-            fontBearDays.SetScale(1.2f, static_cast<float>(window.GetWidth()), static_cast<float>(window.GetHeight()))
+            fontBearDays.SetScale(0.75f, static_cast<float>(window.GetWidth()), static_cast<float>(window.GetHeight()))
                 .SetColor({1.0f, 1.0f, 0.0f, 0.5f})
-                .Render(-0.95f, 0.70f, std::format("SCORE: {}", playerComponent.score));
+                .Render(-0.95f, 0.85f, std::format("SCORE: {}", playerComponent.score));
             break;
         }
             // endregion Game Logic
